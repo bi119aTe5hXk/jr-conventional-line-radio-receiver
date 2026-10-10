@@ -14,8 +14,8 @@ test("product version checks preserve independent DSP and voice library versions
     packages: [
       { id: "gui", name: "jr-receiver-desktop", version: "1.0.0" },
       { id: "cli", name: "jr-receiver", version: "1.0.0" },
-      { id: "dsp", name: "jr_conventional_dsp", version: "1.4.0" },
-      { id: "voice", name: "jr_conventional_voice", version: "1.4.0" },
+      { id: "dsp", name: "jr_conventional_dsp", version: "1.0.0" },
+      { id: "voice", name: "jr_conventional_voice", version: "1.0.0" },
     ],
   };
   assert.equal(releaseLabel(productVersions(cargo), {}), "v1.0.0-dev-local");
