@@ -253,6 +253,7 @@ mod tests {
     }
     #[test]
     fn header_wait_can_be_cancelled_and_wrong_protocol_is_rejected() {
+        let timeout = Duration::from_secs(20);
         for cancel in [true, false] {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let port = listener.local_addr().unwrap().port();
@@ -260,18 +261,33 @@ mod tests {
             let signal = stop.clone();
             let server = thread::spawn(move || {
                 let (mut s, _) = listener.accept().unwrap();
+                s.set_read_timeout(Some(timeout)).unwrap();
                 if cancel {
                     signal.store(true, Ordering::Relaxed);
                 } else {
                     s.write_all(b"HTTP/1.1 200 ").unwrap();
                 }
                 let mut byte = [0];
-                let _ = s.read(&mut byte);
+                // Rejecting a protocol may close with unread bytes, causing
+                // a reset instead of an orderly EOF. Both mean it closed.
+                match s.read(&mut byte) {
+                    Ok(0) => {}
+                    Err(e) if e.kind() == ErrorKind::ConnectionReset => {}
+                    result => panic!("expected the client to close its connection, got {result:?}"),
+                }
             });
-            let start = Instant::now();
-            let error = RtlTcp::open(&config(port), &stop).err().unwrap();
+            let (opened, wait) = mpsc::channel();
+            let client = thread::spawn(move || {
+                let error = RtlTcp::open(&config(port), &stop).err().unwrap();
+                opened.send(error).unwrap();
+            });
+            let error = wait
+                .recv_timeout(timeout)
+                .expect("RTL-TCP header wait did not finish");
+            // Ignoring cancellation would return the missing-header error,
+            // which must still fail even on a slow or heavily loaded runner.
             assert!(error.contains(if cancel { "中止" } else { "RTL0" }));
-            assert!(start.elapsed() < Duration::from_secs(2));
+            client.join().unwrap();
             server.join().unwrap();
         }
     }

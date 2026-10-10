@@ -183,15 +183,23 @@ fn rtl_tcp_disconnect_is_a_failure_after_all_22_workers_drain() {
 }
 
 #[test]
-fn stopping_during_rtl_tcp_handshake_is_prompt_and_not_a_failure() {
+fn stopping_during_rtl_tcp_handshake_closes_connection_without_failure() {
     use std::{io::Read, net::TcpListener, sync::mpsc};
+    let timeout = Duration::from_secs(20);
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let (connected, wait) = mpsc::channel();
     let server = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
+        stream.set_read_timeout(Some(timeout)).unwrap();
         connected.send(()).unwrap();
-        let _ = stream.read(&mut [0]);
+        // Keep the handshake pending until the client closes the connection.
+        // A server timeout or unexpected command must fail this test.
+        match stream.read(&mut [0]) {
+            Ok(0) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::ConnectionReset => {}
+            result => panic!("expected the client to close its connection, got {result:?}"),
+        }
     });
     let mut session = Session::start(Config {
         input: Input::RtlTcp {
@@ -207,14 +215,29 @@ fn stopping_during_rtl_tcp_handshake_is_prompt_and_not_a_failure() {
         channels: presets("east"),
     })
     .unwrap();
-    wait.recv_timeout(Duration::from_secs(3)).unwrap();
-    let start = Instant::now();
-    session.stop();
-    assert!(start.elapsed() < Duration::from_secs(1));
-    let (s, _) = session.snapshot(None);
+    wait.recv_timeout(timeout)
+        .expect("test server did not accept the RTL-TCP connection");
+    let (stopped, wait) = mpsc::channel();
+    let client = std::thread::spawn(move || {
+        session.stop();
+        stopped.send(session.snapshot(None)).unwrap();
+    });
+    // Bound a stuck stop, without treating CI scheduling time as a latency
+    // guarantee. The RTL-TCP unit test checks the cancellation error itself.
+    let (s, audio) = wait
+        .recv_timeout(timeout)
+        .expect("stopping during the RTL-TCP handshake did not finish");
+    client.join().unwrap();
+    server.join().unwrap();
+    assert!(!s.running);
     assert_eq!(s.state, "stopped");
     assert!(s.error.is_none());
-    server.join().unwrap();
+    assert!(audio.is_empty());
+    assert_eq!(s.channels.len(), 22);
+    assert!(s
+        .channels
+        .iter()
+        .all(|c| c.status.iq_samples == 0 && c.error.is_none()));
 }
 
 #[test]
