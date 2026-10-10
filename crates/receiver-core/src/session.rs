@@ -85,8 +85,21 @@ enum Source {
     RtlTcp(crate::rtl_tcp::RtlTcp),
     #[cfg(feature = "soapy")]
     Sdr(crate::source::Sdr),
+    #[cfg(test)]
+    Gated {
+        source: Box<Source>,
+        permits: mpsc::Receiver<()>,
+    },
 }
 impl Source {
+    fn samples(&self) -> Option<u64> {
+        match self {
+            Self::Wave(w) => Some(w.samples),
+            #[cfg(test)]
+            Self::Gated { source, .. } => source.samples(),
+            _ => None,
+        }
+    }
     fn open(input: &Input, stop: &AtomicBool) -> Result<(Self, f64, f64), String> {
         match input {
             Input::RtlTcp { radio } => {
@@ -126,11 +139,29 @@ impl Source {
             }
             #[cfg(feature = "soapy")]
             Self::Sdr(s) => s.read(buf).map(Some),
+            #[cfg(test)]
+            Self::Gated { source, permits } => {
+                match permits.recv_timeout(Duration::from_millis(20)) {
+                    Ok(()) => source.read(buf),
+                    Err(mpsc::RecvTimeoutError::Timeout) => Ok(Some(Read::Timeout)),
+                    Err(mpsc::RecvTimeoutError::Disconnected) => {
+                        Err("Test source gate disconnected".into())
+                    }
+                }
+            }
         }
     }
 }
 impl Session {
     pub fn start(config: Config) -> Result<Self, String> {
+        Self::start_with_source(config, Source::open)
+    }
+    fn start_with_source(
+        config: Config,
+        open_source: impl FnOnce(&Input, &AtomicBool) -> Result<(Source, f64, f64), String>
+            + Send
+            + 'static,
+    ) -> Result<Self, String> {
         if config.channels.is_empty() || config.channels.len() > 64 {
             return Err("Select 1–64 channels".into());
         }
@@ -174,7 +205,15 @@ impl Session {
             .name("iq-acquisition".into())
             .spawn(move || {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                    run(config, &cancel, &state, &workers, &recording, &call_monitor)
+                    run(
+                        config,
+                        &cancel,
+                        &state,
+                        &workers,
+                        &recording,
+                        &call_monitor,
+                        open_source,
+                    )
                 }));
                 let mut s = state.lock().unwrap();
                 // Serialize automatic finalization with starting a recording.
@@ -315,6 +354,7 @@ fn run(
     channels: &[Arc<Mutex<Channel>>],
     recorder: &Arc<Recorder>,
     monitor: &Arc<Mutex<Monitor>>,
+    open_source: impl FnOnce(&Input, &AtomicBool) -> Result<(Source, f64, f64), String>,
 ) -> Result<(), String> {
     if let Input::RtlTcp { radio } = &config.input {
         radio.validate()?;
@@ -324,12 +364,9 @@ fn run(
             radio.center_hz as f64,
         )?;
     }
-    let (mut source, rate, center) = Source::open(&config.input, stop)?;
+    let (mut source, rate, center) = open_source(&config.input, stop)?;
     validate_channels(&config.channels, rate, center)?;
-    let total = match &source {
-        Source::Wave(w) => Some(w.samples),
-        _ => None,
-    };
+    let total = source.samples();
     // Construct every pipeline before starting threads: no partial receiver on invalid input.
     // TCP delivers bursts at network packet boundaries. At 240 kS/s this holds
     // at most 1.28 seconds, still bounded and with explicit loss/reset on overrun.
@@ -522,6 +559,175 @@ fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    mod recording_lifecycle {
+        use super::*;
+        use std::{
+            fs,
+            io::Write,
+            path::{Path, PathBuf},
+            sync::atomic::AtomicU64,
+        };
+
+        const SAMPLES: u32 = 9600;
+
+        struct Temp(PathBuf);
+        impl Temp {
+            fn new() -> Self {
+                static NEXT: AtomicU64 = AtomicU64::new(0);
+                let path = std::env::temp_dir().join(format!(
+                    "jr-session-recording-{}-{}",
+                    std::process::id(),
+                    NEXT.fetch_add(1, Ordering::Relaxed)
+                ));
+                fs::create_dir(&path).unwrap();
+                Self(path)
+            }
+        }
+        impl Drop for Temp {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+
+        fn wait_for_state(session: &Session, expected: &str) -> Overview {
+            let start = Instant::now();
+            loop {
+                let status = session.snapshot(None).0;
+                if status.state == expected {
+                    return status;
+                }
+                assert!(status.running, "{}: {:?}", status.state, status.error);
+                assert!(
+                    start.elapsed() < Duration::from_secs(20),
+                    "waiting for {expected}, got {}",
+                    status.state
+                );
+                thread::sleep(Duration::from_millis(5));
+            }
+        }
+
+        fn gated_wave(directory: &Path) -> (Session, mpsc::Sender<()>) {
+            let path = directory.join("silence.wav");
+            let size = SAMPLES * 8;
+            {
+                let mut file = fs::File::create(&path).unwrap();
+                file.write_all(b"RIFF").unwrap();
+                file.write_all(&(36 + size).to_le_bytes()).unwrap();
+                file.write_all(b"WAVEfmt ").unwrap();
+                for bytes in [
+                    16u32.to_le_bytes(),
+                    [3, 0, 2, 0],
+                    240000u32.to_le_bytes(),
+                    1920000u32.to_le_bytes(),
+                    [8, 0, 32, 0],
+                ] {
+                    file.write_all(&bytes).unwrap();
+                }
+                file.write_all(b"data").unwrap();
+                file.write_all(&size.to_le_bytes()).unwrap();
+                file.write_all(&vec![0; size as usize]).unwrap();
+            }
+            let (release, permits) = mpsc::channel();
+            let session = Session::start_with_source(
+                Config {
+                    input: Input::Wave {
+                        path: path.to_string_lossy().into(),
+                        center_hz: 352603125.0,
+                    },
+                    channels: crate::pipeline::presets("east"),
+                },
+                move |input, stop| {
+                    let (source, rate, center) = Source::open(input, stop)?;
+                    Ok((
+                        Source::Gated {
+                            source: Box::new(source),
+                            permits,
+                        },
+                        rate,
+                        center,
+                    ))
+                },
+            )
+            .unwrap();
+            // No read, including the EOF read, can occur until explicitly
+            // released. Slow filesystem operations cannot finish this input.
+            wait_for_state(&session, "receiving");
+            (session, release)
+        }
+
+        fn assert_finalized(directory: &str) {
+            let folder = Path::new(directory);
+            let result: serde_json::Value =
+                serde_json::from_slice(&fs::read(folder.join("result.json")).unwrap()).unwrap();
+            assert_eq!(result["error"], serde_json::Value::Null);
+            assert_eq!(result["files"], 0);
+            assert!(!folder.join("INCOMPLETE").exists());
+        }
+
+        #[test]
+        fn recording_stop_preserves_reception_and_allows_restart() {
+            let temp = Temp::new();
+            let (mut session, _release) = gated_wave(&temp.0);
+            assert!(session.start_recording(&temp.0.join("missing")).is_err());
+            assert_eq!(session.snapshot(None).0.state, "receiving");
+
+            let first = session.start_recording(&temp.0).unwrap();
+            let stopped = session.stop_recording();
+            assert_eq!(stopped.state, "completed");
+            assert_eq!(stopped.directory, first.directory);
+            assert_finalized(first.directory.as_deref().unwrap());
+            let status = session.snapshot(None).0;
+            assert!(status.running);
+            assert_eq!(status.state, "receiving");
+            assert!(status.error.is_none());
+
+            let second = session.start_recording(&temp.0).unwrap();
+            assert_eq!(second.state, "recording");
+            assert_ne!(first.directory, second.directory);
+            session.stop();
+            let status = session.snapshot(None).0;
+            assert_eq!(status.state, "stopped");
+            assert_eq!(status.recording.state, "completed");
+            assert_finalized(second.directory.as_deref().unwrap());
+        }
+
+        #[test]
+        fn wave_eof_finalizes_recording_after_all_workers_drain() {
+            let temp = Temp::new();
+            let (mut session, release) = gated_wave(&temp.0);
+            let recording = session.start_recording(&temp.0).unwrap();
+            assert_eq!(recording.state, "recording");
+            // One 40 ms IQ block, then the real IqWave EOF. Neither depends
+            // on how long recording setup took on this machine.
+            release.send(()).unwrap();
+            release.send(()).unwrap();
+            let done = wait_for_state(&session, "completed");
+            assert!(!done.running);
+            assert!(done.error.is_none());
+            assert_eq!(done.recording.state, "completed");
+            assert_eq!(done.recording.directory, recording.directory);
+            assert_eq!(done.channels.len(), 22);
+            for channel in done.channels {
+                assert_eq!(channel.status.iq_samples, SAMPLES as u64);
+                assert_eq!(channel.dropped_blocks, 0);
+                assert!(channel.error.is_none());
+            }
+            assert_finalized(recording.directory.as_deref().unwrap());
+            assert!(session.start_recording(&temp.0).is_err());
+            session.stop();
+        }
+
+        #[test]
+        fn dropping_session_finalizes_recording_before_input_eof() {
+            let temp = Temp::new();
+            let (session, _release) = gated_wave(&temp.0);
+            let recording = session.start_recording(&temp.0).unwrap();
+            assert_eq!(recording.state, "recording");
+            drop(session);
+            assert_finalized(recording.directory.as_deref().unwrap());
+        }
+    }
+
     #[test]
     fn automatic_snapshot_delivers_chosen_audio_and_manual_selection_remains_authoritative() {
         let configs = crate::pipeline::presets("east")[..2].to_vec();

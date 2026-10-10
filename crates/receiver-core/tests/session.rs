@@ -1,6 +1,6 @@
 use receiver_core::{
     pipeline::presets,
-    session::{Config, Input, Session},
+    session::{Config, Input, Overview, Session},
     wave::{IqWave, PcmWave},
 };
 use std::{
@@ -31,6 +31,25 @@ fn silence(path: &PathBuf, samples: u32) {
     f.write_all(&size.to_le_bytes()).unwrap();
     f.write_all(&vec![0; size as usize]).unwrap();
 }
+
+fn wait_for_session_end(session: &Session) -> Overview {
+    let start = Instant::now();
+    loop {
+        let (status, _) = session.snapshot(None);
+        if !status.running {
+            return status;
+        }
+        // This bounds a stalled test, not DSP throughput. All 22 unoptimized
+        // workers must drain, even on a busy CI runner.
+        assert!(
+            start.elapsed() < Duration::from_secs(20),
+            "session did not finish within 20 seconds: {}",
+            serde_json::to_string(&status).unwrap()
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
 #[test]
 fn all_22_workers_receive_the_same_iq_and_finish_without_drops() {
     let path = temporary("all.wav");
@@ -43,15 +62,7 @@ fn all_22_workers_receive_the_same_iq_and_finish_without_drops() {
         channels: presets("east"),
     })
     .unwrap();
-    let start = Instant::now();
-    let final_status = loop {
-        let (s, _) = session.snapshot(None);
-        if !s.running {
-            break s;
-        }
-        assert!(start.elapsed() < Duration::from_secs(20));
-        std::thread::sleep(Duration::from_millis(20));
-    };
+    let final_status = wait_for_session_end(&session);
     assert_eq!(final_status.state, "completed", "{:?}", final_status.error);
     assert_eq!(final_status.channels.len(), 22);
     for c in final_status.channels {
@@ -63,62 +74,6 @@ fn all_22_workers_receive_the_same_iq_and_finish_without_drops() {
     }
     session.stop();
     fs::remove_file(path).unwrap();
-}
-#[test]
-fn recording_stop_preserves_reception_and_eof_or_drop_finalize_the_recording() {
-    let path = temporary("recording.wav");
-    let directory = temporary("recording-output");
-    fs::create_dir(&directory).unwrap();
-    silence(&path, 240000);
-    let config = Config {
-        input: Input::Wave {
-            path: path.to_string_lossy().into(),
-            center_hz: 352603125.0,
-        },
-        channels: presets("east"),
-    };
-    let mut session = Session::start(config.clone()).unwrap();
-    let start = Instant::now();
-    while session.snapshot(None).0.state != "receiving" {
-        assert!(start.elapsed() < Duration::from_secs(5));
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    assert!(session.start_recording(&directory.join("missing")).is_err());
-    assert!(session.snapshot(None).0.running);
-    let first = session.start_recording(&directory).unwrap();
-    assert_eq!(session.stop_recording().state, "completed");
-    assert!(session.snapshot(None).0.running);
-    let second = session.start_recording(&directory).unwrap();
-    assert_ne!(first.directory, second.directory);
-    let done = loop {
-        let s = session.snapshot(None).0;
-        if !s.running {
-            break s;
-        }
-        assert!(start.elapsed() < Duration::from_secs(5));
-        std::thread::sleep(Duration::from_millis(10));
-    };
-    assert_eq!(done.state, "completed");
-    assert_eq!(done.recording.state, "completed");
-    assert_eq!(done.recording.files, 0);
-    let folder = PathBuf::from(second.directory.unwrap());
-    assert!(folder.join("result.json").exists());
-    assert!(!folder.join("INCOMPLETE").exists());
-    assert!(session.start_recording(&directory).is_err());
-    session.stop();
-    let session = Session::start(config).unwrap();
-    let start = Instant::now();
-    while session.snapshot(None).0.state != "receiving" {
-        assert!(start.elapsed() < Duration::from_secs(5));
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    let recording = session.start_recording(&directory).unwrap();
-    drop(session);
-    let folder = PathBuf::from(recording.directory.unwrap());
-    assert!(folder.join("result.json").exists());
-    assert!(!folder.join("INCOMPLETE").exists());
-    fs::remove_file(path).unwrap();
-    fs::remove_dir_all(directory).unwrap();
 }
 #[test]
 fn cancellation_joins_workers_and_new_session_has_no_old_state() {
@@ -213,20 +168,15 @@ fn rtl_tcp_disconnect_is_a_failure_after_all_22_workers_drain() {
         channels: presets("east"),
     })
     .unwrap();
-    let start = Instant::now();
-    loop {
-        let (s, _) = session.snapshot(None);
-        if !s.running {
-            assert_eq!(s.state, "failed");
-            assert!(s.error.unwrap().contains("接続を閉じ"));
-            assert!(s
-                .channels
-                .iter()
-                .all(|c| c.status.iq_samples == 38400 && c.dropped_blocks == 0));
-            break;
-        }
-        assert!(start.elapsed() < Duration::from_secs(5));
-        std::thread::sleep(Duration::from_millis(10));
+    let status = wait_for_session_end(&session);
+    assert_eq!(status.state, "failed", "{:?}", status.error);
+    assert!(status.error.as_deref().unwrap().contains("接続を閉じ"));
+    assert_eq!(status.channels.len(), 22);
+    for channel in status.channels {
+        assert_eq!(channel.status.iq_samples, 38400, "{}", channel.config.id);
+        assert_eq!(channel.dropped_blocks, 0, "{}", channel.config.id);
+        assert_eq!(channel.status.discontinuities, 0, "{}", channel.config.id);
+        assert!(channel.error.is_none(), "{:?}", channel.error);
     }
     session.stop();
     server.join().unwrap();
