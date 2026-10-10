@@ -1,0 +1,15 @@
+[package]
+name = "jr-receiver"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[features]
+default = ["soapy"]
+soapy = ["receiver-core/soapy"]
+
+[dependencies]
+receiver-core = { path = "../receiver-core", default-features = false }
+serde_json.workspace = true
+

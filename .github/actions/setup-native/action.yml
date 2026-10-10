@@ -1,0 +1,49 @@
+name: Native build dependencies
+description: Install Tauri and SoapySDR 0.8 build dependencies on the native runner.
+runs:
+  using: composite
+  steps:
+    - name: Install Linux dependencies
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          build-essential pkg-config libsoapysdr-dev \
+          libwebkit2gtk-4.1-dev libgtk-3-dev libxdo-dev \
+          libayatana-appindicator3-dev librsvg2-dev libssl-dev
+
+    - name: Install macOS dependencies
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        brew install pkgconf soapysdr
+        echo "PKG_CONFIG_PATH=$(brew --prefix soapysdr)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+
+    # Build the MSVC import library and DLL from the official 0.8.1 release.
+    # A MinGW import library cannot be used by Rust's MSVC target.
+    - name: Fetch SoapySDR source for Windows
+      if: runner.os == 'Windows'
+      uses: actions/checkout@v7
+      with:
+        repository: pothosware/SoapySDR
+        ref: 1cf5a539a21414ff509ff7d0eedfc5fa8edb90c6 # soapy-sdr-0.8.1
+        path: .ci-deps/SoapySDR
+        persist-credentials: false
+
+    - name: Build Windows SoapySDR SDK
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        $soapyPrefix = Join-Path $env:RUNNER_TEMP 'soapysdr'
+        $soapyBuild = Join-Path $env:RUNNER_TEMP 'soapysdr-build'
+        cmake -S .ci-deps/SoapySDR -B $soapyBuild -G 'Visual Studio 17 2022' -A x64 `
+          "-DCMAKE_INSTALL_PREFIX=$soapyPrefix" -DCMAKE_INSTALL_LIBDIR=lib `
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5 `
+          -DENABLE_PYTHON=OFF -DENABLE_PYTHON3=OFF -DENABLE_TESTS=OFF -DENABLE_DOCS=OFF
+        cmake --build $soapyBuild --config Release --parallel 2
+        cmake --install $soapyBuild --config Release
+        "SOAPY_SDR_ROOT=$soapyPrefix" >> $env:GITHUB_ENV
+        (Join-Path $soapyPrefix 'bin') >> $env:GITHUB_PATH

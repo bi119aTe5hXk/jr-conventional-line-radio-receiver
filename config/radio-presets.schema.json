@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JR Cconventional-line Radio Receiver configuration, version 1",
+  "description": "Application-owned channel definitions and receive profiles. Cross-reference, uniqueness and capture bandwidth checks run in receiver-core.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "channel_sets", "profiles"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "channel_sets": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/channel_set" }
+    },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/profile" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+    "label": { "type": "string", "pattern": "\\S" },
+    "frequency": { "type": "integer", "minimum": 1, "maximum": 100000000000 },
+    "service": { "enum": ["voice", "data", "common", "unassigned"] },
+    "channel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frequency_hz", "label", "service", "note"],
+      "properties": {
+        "frequency_hz": { "$ref": "#/$defs/frequency" },
+        "label": { "$ref": "#/$defs/label" },
+        "service": { "$ref": "#/$defs/service" },
+        "note": { "type": "string" }
+      }
+    },
+    "channel_set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "region", "direction", "channels"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "region": { "enum": ["east", "central", "west"] },
+        "direction": {
+          "const": "downlink",
+          "description": "Version 1 supports base-station downlink decoding only."
+        },
+        "channels": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/channel" }
+        }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["center_hz", "sample_rate"],
+      "properties": {
+        "center_hz": { "$ref": "#/$defs/frequency" },
+        "sample_rate": {
+          "type": "integer",
+          "minimum": 9600,
+          "maximum": 20000000
+        }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "channel_set", "services", "capture", "note"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/label" },
+        "channel_set": { "$ref": "#/$defs/id" },
+        "services": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/service" }
+        },
+        "capture": { "$ref": "#/$defs/capture" },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}

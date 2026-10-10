@@ -1,0 +1,325 @@
+{
+  "schema_version": 1,
+  "channel_sets": [
+    {
+      "id": "east-downlink",
+      "region": "east",
+      "direction": "downlink",
+      "channels": [
+        {
+          "frequency_hz": 352537500,
+          "label": "D5 音声第1波",
+          "service": "voice",
+          "note": "変則割当：大船渡線 D7 音声第1波"
+        },
+        {
+          "frequency_hz": 352543750,
+          "label": "D7 音声第1波",
+          "service": "voice",
+          "note": "変則割当：奥羽本線（大館～青森）D6 音声第1波 / 仙石線 D2 音声第1波"
+        },
+        {
+          "frequency_hz": 352550000,
+          "label": "D3 音声第1波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352556250,
+          "label": "D1 音声第1波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352562500,
+          "label": "D4 音声第1波",
+          "service": "voice",
+          "note": "変則割当：仙山線 D3 音声第2波"
+        },
+        {
+          "frequency_hz": 352568750,
+          "label": "D6 音声第1波",
+          "service": "voice",
+          "note": "変則割当：東北本線（黒磯～盛岡）D1 音声第2波"
+        },
+        {
+          "frequency_hz": 352575000,
+          "label": "D2 音声第1波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352581250,
+          "label": "D6 音声第2波",
+          "service": "voice",
+          "note": "変則割当：陸羽東線 D3 音声第2波 / 大船渡線 D7 音声第2波"
+        },
+        {
+          "frequency_hz": 352587500,
+          "label": "D5 音声第2波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352593750,
+          "label": "D2 音声第2波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352600000,
+          "label": "D4 音声第2波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352606250,
+          "label": "D7 音声第2波",
+          "service": "voice",
+          "note": "変則割当：仙石線 D2 音声第2波 / 石巻線 D5 音声第2波"
+        },
+        {
+          "frequency_hz": 352612500,
+          "label": "D3 音声第2波",
+          "service": "voice",
+          "note": "変則割当：中央本線（甲府～小淵沢）D6 音声第1波"
+        },
+        {
+          "frequency_hz": 352618750,
+          "label": "D1 音声第2波",
+          "service": "voice",
+          "note": "変則割当：小海線 D4 音声第1波"
+        },
+        {
+          "frequency_hz": 352625000,
+          "label": "旅客一斉情報",
+          "service": "common",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352631250,
+          "label": "D1 データ波",
+          "service": "data",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352637500,
+          "label": "D2 データ波",
+          "service": "data",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352643750,
+          "label": "D3 データ波",
+          "service": "data",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352650000,
+          "label": "D4 データ波",
+          "service": "data",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352656250,
+          "label": "D5 データ波",
+          "service": "data",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352662500,
+          "label": "D6 データ波",
+          "service": "data",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352668750,
+          "label": "D7 データ波",
+          "service": "data",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "central-downlink",
+      "region": "central",
+      "direction": "downlink",
+      "channels": [
+        {
+          "frequency_hz": 352600000,
+          "label": "D4 音声第1波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352637500,
+          "label": "D4 音声第2波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352650000,
+          "label": "D4 データ波",
+          "service": "data",
+          "note": ""
+        }
+      ]
+    },
+    {
+      "id": "west-downlink",
+      "region": "west",
+      "direction": "downlink",
+      "channels": [
+        {
+          "frequency_hz": 352537500,
+          "label": "D2 音声第1波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352543750,
+          "label": "旅客一斉情報",
+          "service": "common",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352550000,
+          "label": "D5 音声第2波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352556250,
+          "label": "D4 音声第2波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352562500,
+          "label": "D2 音声第2波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352568750,
+          "label": "D6 音声第2波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352575000,
+          "label": "D5 音声第1波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352581250,
+          "label": "D3 音声第2波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352587500,
+          "label": "D7 音声第2波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352593750,
+          "label": "D7 音声第1波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352600000,
+          "label": "D4 音声第1波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352606250,
+          "label": "D6 音声第1波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352612500,
+          "label": "D3 音声第1波",
+          "service": "voice",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352637500,
+          "label": "D2 データ波",
+          "service": "data",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352643750,
+          "label": "D3 データ波",
+          "service": "data",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352650000,
+          "label": "D4 データ波",
+          "service": "data",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352656250,
+          "label": "D5 データ波",
+          "service": "data",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352662500,
+          "label": "D6 データ波",
+          "service": "data",
+          "note": ""
+        },
+        {
+          "frequency_hz": 352668750,
+          "label": "D7 データ波",
+          "service": "data",
+          "note": ""
+        }
+      ]
+    }
+  ],
+  "profiles": [
+    {
+      "id": "east",
+      "label": "JR 東日本（22波）",
+      "channel_set": "east-downlink",
+      "services": ["voice", "data", "common"],
+      "capture": {
+        "center_hz": 352603125,
+        "sample_rate": 240000
+      },
+      "note": "音声14波・データ7波・旅客一斉情報1波を同時受信します。"
+    },
+    {
+      "id": "central",
+      "label": "JR 東海（3波）",
+      "channel_set": "central-downlink",
+      "services": ["voice", "data"],
+      "capture": {
+        "center_hz": 352625000,
+        "sample_rate": 240000
+      },
+      "note": "音声2波・データ1波を同時受信します。復号互換性は実受信で未検証です。"
+    },
+    {
+      "id": "west",
+      "label": "JR 西日本（19波）",
+      "channel_set": "west-downlink",
+      "services": ["voice", "data", "common"],
+      "capture": {
+        "center_hz": 352603125,
+        "sample_rate": 240000
+      },
+      "note": "音声12波・データ6波・旅客一斉情報1波を同時受信します。復号互換性は実受信で未検証です。"
+    }
+  ]
+}

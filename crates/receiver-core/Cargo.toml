@@ -1,0 +1,22 @@
+[package]
+name = "receiver-core"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[features]
+default = ["soapy"]
+soapy = []
+
+[dependencies]
+jr_conventional_dsp = { path = "../jr-conventional-dsp" }
+jr_conventional_voice = { path = "../jr-voice" }
+serde.workspace = true
+serde_json.workspace = true
+encoding_rs = "0.8"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+
+[build-dependencies]
+pkg-config = "0.3"
+

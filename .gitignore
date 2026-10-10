@@ -1,0 +1,7 @@
+/target/
+/dist/
+/.ci-deps/
+/node_modules/
+/src-tauri/gen/
+*.wav.incomplete
+*.jsonl.incomplete
