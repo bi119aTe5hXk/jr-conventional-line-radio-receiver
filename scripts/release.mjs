@@ -141,7 +141,6 @@ function packageRelease(info) {
   for (const [source, destination] of [
     ["ui/radio-presets.json", "radio-presets.json"],
     ["config/radio-presets.schema.json", "radio-presets.schema.json"],
-    ["crates/jr-voice/UPSTREAM.json", "voice-UPSTREAM.json"],
   ]) {
     mkdirSync(dirname(join(stage, destination)), { recursive: true });
     copyFileSync(join(root, source), join(stage, destination));
