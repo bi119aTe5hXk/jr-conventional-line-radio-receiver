@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { JSDOM } from "jsdom";
 import { makeInput } from "../../ui/config.mjs";
 import { buildCatalog } from "../../ui/presets.mjs";
+import { AudioPlayer } from "../../ui/audio.mjs";
 const html = await readFile(
   new URL("../../ui/index.html", import.meta.url),
   "utf8",
@@ -87,7 +88,13 @@ async function setup(
     timers = [],
     modalCalls = [];
   const playback = [];
+  const audioSources = [];
+  const pollDelays = [];
+  let audioContext;
   w.AudioContext = class {
+    constructor() {
+      audioContext = this;
+    }
     state = "running";
     currentTime = 0;
     destination = {};
@@ -95,25 +102,31 @@ async function setup(
     createGain() {
       return { gain: { value: 1 }, connect() {} };
     }
-    createBuffer(_channels, length) {
+    createBuffer(_channels, length, sampleRate) {
       const samples = new Float32Array(length);
-      return { getChannelData: () => samples };
+      return { duration: length / sampleRate, getChannelData: () => samples };
     }
     createBufferSource() {
-      return {
+      const source = {
+        playbackRate: { value: 1 },
         connect() {},
         disconnect() {},
-        stop() {},
-        start() {
+        stop() {
+          this.stopped = true;
+        },
+        start(at) {
+          this.at = at;
           playback.push(this.buffer.getChannelData(0)[0]);
         },
       };
+      audioSources.push(source);
+      return source;
     }
   };
   let snapshot = { status: status(), audio: [] };
   let recording = { state: "idle", files: 0, pcm_samples: 0, error: null };
   let closeHandler;
-  w.testDependencies = { makeInput, buildCatalog };
+  w.testDependencies = { makeInput, buildCatalog, AudioPlayer };
   w.structuredClone = structuredClone;
   // jsdom has no native modal behavior. Exercise our handlers, not a focus trap
   // or Escape key implementation; those belong to the browser's dialog element.
@@ -135,8 +148,9 @@ async function setup(
         set: () => true,
       },
     );
-  w.setTimeout = (callback) => {
+  w.setTimeout = (callback, delay) => {
     timers.push(callback);
+    pollDelays.push(delay);
     return timers.length;
   };
   w.__TAURI__ = native
@@ -233,7 +247,7 @@ async function setup(
     };
   };
   await w.eval(
-    `(async () => {const { makeInput, buildCatalog } = window.testDependencies;\n${source}\n})()`,
+    `(async () => {const { makeInput, buildCatalog, AudioPlayer } = window.testDependencies;\n${source}\n})()`,
   );
   const $ = (id) => w.document.getElementById(id);
   if (!catalogError)
@@ -256,6 +270,9 @@ async function setup(
     calls,
     modalCalls,
     playback,
+    audioSources,
+    pollDelays,
+    setAudioTime: (time) => (audioContext.currentTime = time),
     preferences,
     closeWindow: async () => {
       assert.ok(closeHandler);
@@ -666,6 +683,87 @@ test("automatic selection plays the returned channel while a manual choice pins 
     "true",
   );
 });
+test("a delayed audio snapshot does not stop the playing frame or insert a new startup delay", async (t) => {
+  const ui = await setup(t);
+  await ui.click("listen");
+  await ui.click("start");
+  const burst = (first) => ({
+    status: status(),
+    audio: Array.from({ length: 4 }, (_, i) => ({
+      channel: presets[0].id,
+      epoch: 0,
+      index: first + i,
+      pcm: Array(320).fill(8000),
+    })),
+  });
+  ui.setSnapshot(burst(0));
+  await ui.poll();
+  const tail = ui.audioSources.at(-1);
+  const end = tail.at + tail.buffer.duration / tail.playbackRate.value;
+  // IPC/timer delay leaves 10 ms queued: this is not a buffer underrun.
+  ui.setAudioTime(end - 0.01);
+  ui.setSnapshot(burst(4));
+  await ui.poll();
+  assert.equal(ui.audioSources.length, 8);
+  assert.ok(ui.audioSources.every((node) => !node.stopped));
+  assert.ok(Math.abs(ui.audioSources[4].at - end) < 1e-9);
+});
+
+test("pinning the playing channel and a stale automatic reply preserve its audio", async (t) => {
+  const ui = await setup(t);
+  await ui.click("listen");
+  await ui.click("start");
+  ui.setSnapshot({
+    status: status(),
+    audio: [
+      {
+        channel: presets[0].id,
+        epoch: 0,
+        index: 0,
+        pcm: Array(320).fill(8000),
+      },
+    ],
+  });
+  await ui.poll();
+  let deliver;
+  ui.setSnapshot(
+    () =>
+      new Promise((resolve) => {
+        deliver = resolve;
+      }),
+  );
+  const polling = ui.poll();
+  await tick();
+  ui.$("channels-simple").children[0].querySelector(".channel-select").click();
+  assert.equal(ui.$("auto-select").checked, false);
+  assert.ok(ui.audioSources.every((node) => !node.stopped));
+  deliver({ status: { ...status(), selected_channel: presets[1].id }, audio: [] });
+  await polling;
+  assert.ok(ui.audioSources.every((node) => !node.stopped));
+  await ui.click("listen");
+  assert.ok(ui.audioSources.every((node) => node.stopped));
+  assert.equal(ui.$("audio-state").textContent, "消音中");
+});
+
+test("snapshot work counts toward the polling period rather than extending it", async (t) => {
+  const ui = await setup(t);
+  await ui.click("start");
+  let time = 0;
+  ui.w.performance.now = () => time;
+  ui.setSnapshot(() => {
+    time += 75;
+    return { status: status(), audio: [] };
+  });
+  await ui.poll();
+  assert.equal(ui.pollDelays.at(-1), 105);
+  ui.setSnapshot(() => {
+    time += 250;
+    return { status: status(), audio: [] };
+  });
+  await ui.poll();
+  assert.equal(ui.pollDelays.at(-1), 20);
+});
+
 test("manual selection rejects an automatic snapshot already in flight", async (t) => {
   const ui = await setup(t);
   await ui.click("start");

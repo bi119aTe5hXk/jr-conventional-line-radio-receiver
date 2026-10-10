@@ -228,6 +228,7 @@ Source overflow or queue loss invalidates continuity for the affected stream and
 IQ queues hold eight blocks per channel. The TCP input queue holds 32 blocks to absorb bursts, or up to 1.28 seconds at 240 kS/s.
 TCP header reads time out after three seconds; five seconds without stream data is an error. Disconnects are distinguished from normal completion.
 UI snapshots update roughly every 180 ms. Data history is limited to 128 messages per channel, and the audio monitor queue to five seconds.
+Live playback starts with a 320 ms jitter buffer and schedules subsequent PCM frames continuously on the audio clock, before rendering UI details. Small arrival delays do not cancel playing audio. A gradual playback-rate adjustment (at most ±0.5%) compensates for receiver/output clock drift; the scheduled playback queue is capped at one second. These adjustments affect monitoring only, not recorded WAV samples.
 Stopping joins input and processing threads. Restarting creates fresh state.
 
 ```sh

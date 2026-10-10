@@ -1,5 +1,6 @@
 import { makeInput } from "./config.mjs";
 import { buildCatalog } from "./presets.mjs";
+import { AudioPlayer } from "./audio.mjs";
 const $ = (id) => document.getElementById(id);
 const native = !!window.__TAURI__;
 const invoke = (command, args) => window.__TAURI__.core.invoke(command, args);
@@ -44,12 +45,7 @@ let bundledCatalog = [],
   presetCatalog = [],
   presetFile = null,
   activePresetId = "east";
-let context,
-  gain,
-  audioOrigin,
-  audioEpoch,
-  audioIndex = -1;
-const sources = new Set();
+let context, gain, audioPlayer;
 const rows = new Map(),
   messageNodes = new Map();
 const kinds = {
@@ -291,7 +287,7 @@ function setControls() {
   $("total-enabled").textContent = enabled.size;
   $("audio-state").textContent = !$("listen").checked
     ? "消音中"
-    : sources.size
+    : audioPlayer?.active
       ? "音声再生中"
       : "音声待機";
   for (const [id, r] of rows) {
@@ -449,15 +445,7 @@ $("record-stop").addEventListener("click", async () => {
   }
 });
 function resetAudio() {
-  for (const node of sources) {
-    try {
-      node.stop();
-    } catch {}
-  }
-  sources.clear();
-  audioOrigin = undefined;
-  audioEpoch = undefined;
-  audioIndex = -1;
+  audioPlayer?.reset();
 }
 async function prepareAudio() {
   if (!$("listen").checked) return;
@@ -465,41 +453,14 @@ async function prepareAudio() {
     context = new AudioContext();
     gain = context.createGain();
     gain.connect(context.destination);
+    audioPlayer = new AudioPlayer(context, gain);
   }
   gain.gain.value = Number($("volume").value) / 100;
   await context.resume();
 }
 function play(frames) {
   if (!context || context.state !== "running" || !$("listen").checked) return;
-  for (const frame of frames) {
-    if (frame.channel !== selected) continue;
-    if (frame.epoch !== audioEpoch) {
-      resetAudio();
-      audioEpoch = frame.epoch;
-    }
-    if (frame.index <= audioIndex) continue;
-    const now = context.currentTime;
-    let at = audioOrigin === undefined ? NaN : audioOrigin + frame.index * 0.04;
-    if (!Number.isFinite(at) || at < now + 0.02 || at > now + 1) {
-      resetAudio();
-      audioEpoch = frame.epoch;
-      audioOrigin = now + 0.18 - frame.index * 0.04;
-      at = now + 0.18;
-    }
-    const buffer = context.createBuffer(1, frame.pcm.length, 8000);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = frame.pcm[i] / 32768;
-    const node = context.createBufferSource();
-    node.buffer = buffer;
-    node.connect(gain);
-    sources.add(node);
-    node.onended = () => {
-      sources.delete(node);
-      node.disconnect();
-    };
-    node.start(at);
-    audioIndex = frame.index;
-  }
+  audioPlayer.enqueue(frames, selected);
 }
 function receiveCheck(c) {
   const check = el("input");
@@ -633,8 +594,8 @@ function select(id, manual = false) {
     $("auto-select").checked = false;
     renderSelectionMode();
   }
+  if (selected !== id) resetAudio();
   selected = id;
-  resetAudio();
   messageNodes.clear();
   $("messages").replaceChildren();
   for (const [key, r] of rows) {
@@ -1176,6 +1137,7 @@ $("volume").addEventListener("input", () => {
   if (gain) gain.gain.value = Number($("volume").value) / 100;
 });
 async function poll() {
+  const started = performance.now();
   try {
     if (native && !busy && sessionVisible) {
       const generation = uiGeneration;
@@ -1191,6 +1153,23 @@ async function poll() {
         lastSnapshot = s;
         if (s.recording) recordingStatus = s.recording;
         running = s.running;
+        const selectionCurrent = revision === selectionRevision;
+        if (
+          selectionCurrent &&
+          automatic &&
+          s.selected_channel &&
+          s.selected_channel !== selected &&
+          channels.some((c) => c.id === s.selected_channel)
+        ) {
+          select(s.selected_channel);
+        }
+        // Feed the audio clock before rendering message history and channel
+        // details. A stale selection response must not clear newer playback.
+        if (selectionCurrent) {
+          if (s.state === "receiving" || s.state === "completed")
+            play(result.audio);
+          else resetAudio();
+        }
         const stateLabel =
           {
             starting: "準備中",
@@ -1224,32 +1203,18 @@ async function poll() {
           $("input-kind").value === "wave"
             ? `再生 ${(s.progress * 100).toFixed(0)} %`
             : "";
-        const selectionCurrent = revision === selectionRevision;
-        if (
-          selectionCurrent &&
-          automatic &&
-          s.selected_channel &&
-          s.selected_channel !== selected &&
-          channels.some((c) => c.id === s.selected_channel)
-        ) {
-          select(s.selected_channel);
-        }
         const c = s.channels.find((c) => c.config.id === selected);
         if (selectionCurrent) detail(c?.status ?? null);
         if (c?.error) fail(c.error);
-        if (
-          selectionCurrent &&
-          (s.state === "receiving" || s.state === "completed")
-        )
-          play(result.audio);
-        else resetAudio();
         setControls();
       }
     }
   } catch (e) {
     fail(e);
   } finally {
-    setTimeout(poll, 180);
+    // IPC and rendering time are part of the polling period, not an extra
+    // delay added after it. Leave breathing room when a poll itself is slow.
+    setTimeout(poll, Math.max(20, 180 - (performance.now() - started)));
   }
 }
 busy = true;
