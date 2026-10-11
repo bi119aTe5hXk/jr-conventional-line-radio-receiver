@@ -7,6 +7,7 @@ import { makeInput } from "../../ui/config.mjs";
 import { buildCatalog } from "../../ui/presets.mjs";
 import { AudioPlayer } from "../../ui/audio.mjs";
 import { OperationMonitorView } from "../../ui/operation-monitor.mjs";
+import { RoutePicker } from "../../ui/route-picker.mjs";
 const html = await readFile(
   new URL("../../ui/index.html", import.meta.url),
   "utf8",
@@ -127,7 +128,7 @@ async function setup(
   let snapshot = { status: status(), audio: [] };
   let recording = { state: "idle", files: 0, pcm_samples: 0, error: null };
   let closeHandler;
-  w.testDependencies = { makeInput, buildCatalog, AudioPlayer, OperationMonitorView };
+  w.testDependencies = { makeInput, buildCatalog, AudioPlayer, OperationMonitorView, RoutePicker };
   w.structuredClone = structuredClone;
   // jsdom has no native modal behavior. Exercise our handlers, not a focus trap
   // or Escape key implementation; those belong to the browser's dialog element.
@@ -252,7 +253,7 @@ async function setup(
     };
   };
   await w.eval(
-    `(async () => {const { makeInput, buildCatalog, AudioPlayer, OperationMonitorView } = window.testDependencies;\n${source}\n})()`,
+    `(async () => {const { makeInput, buildCatalog, AudioPlayer, OperationMonitorView, RoutePicker } = window.testDependencies;\n${source}\n})()`,
   );
   const $ = (id) => w.document.getElementById(id);
   if (!catalogError)
@@ -312,6 +313,78 @@ async function setup(
     },
   };
 }
+test("route draft is searchable, cancelable, and only applies explicit receive targets", async (t) => {
+  const ui = await setup(t);
+  ui.$("channels-simple").children[0].querySelector(".channel-select").click();
+  const frequency = ui.$("selected-frequency").textContent;
+  await ui.click("route-open");
+  assert.equal(ui.$("channels-panel").open, false);
+  assert.equal(ui.w.document.activeElement.id, "route-search");
+  await ui.click("route-apply");
+  assert.equal(ui.$("route-error").hidden, false);
+  ui.input("route-search", "甲府 小淵沢");
+  const visible = [...ui.$("route-results").children].filter((n) => !n.hidden);
+  assert.equal(visible.length, 1);
+  visible[0].querySelector("input").click();
+  assert.equal(ui.$("route-selected-count").textContent, "1 区間 · 4 波");
+  assert.match(ui.$("route-frequencies").textContent, /352\.61250 MHz/);
+  assert.equal(ui.$("total-enabled").textContent, "22");
+  ui.input("route-search", "該当なし");
+  assert.equal(ui.$("route-no-results").hidden, false);
+  assert.equal(ui.$("route-chosen").children.length, 1);
+  ui.$("route-search").dispatchEvent(new ui.w.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  assert.equal(ui.$("route-dialog").open, false);
+  assert.equal(ui.$("total-enabled").textContent, "22");
+  assert.equal(ui.w.document.activeElement.id, "route-open");
+  await ui.click("route-open");
+  assert.equal(ui.$("route-chosen").children.length, 0);
+  ui.input("route-search", "甲府 小淵沢");
+  [...ui.$("route-results").children].find((n) => !n.hidden).querySelector("input").click();
+  await ui.click("route-apply");
+  assert.equal(ui.$("route-dialog").open, false);
+  assert.equal(ui.$("total-enabled").textContent, "4");
+  assert.equal(ui.$("selected-frequency").textContent, frequency);
+  assert.equal(ui.$("auto-select").checked, false);
+  assert.equal(ui.calls.some((c) => c.command === "start"), false);
+  await ui.click("route-open");
+  assert.equal(ui.$("route-chosen").children.length, 1);
+  await ui.click("route-cancel");
+  await ui.click("start");
+  const start = ui.calls.find((c) => c.command === "start");
+  assert.deepEqual(Array.from(start.args.config.channels, (c) => c.frequency_hz), [352581250, 352612500, 352625000, 352662500]);
+  await ui.poll();
+  await ui.click("route-open");
+  assert.equal(ui.$("route-apply").disabled, true);
+  assert.equal(ui.$("route-locked").hidden, false);
+  await ui.change("route-profile", "central");
+  ui.$("route-results").querySelector("input").click();
+  await ui.click("route-apply");
+  assert.equal(ui.$("region").value, "east");
+});
+
+test("route selection switches company after confirmation and supports legacy external presets", async (t) => {
+  const legacy = structuredClone(catalog[1]);
+  legacy.id = "legacy";
+  delete legacy.routes;
+  const ui = await setup(t, { presetFiles: { path: "/tmp/legacy.json", catalogs: { "/tmp/legacy.json": [legacy] } } });
+  await ui.click("route-open");
+  await ui.change("route-profile", "central");
+  assert.equal(ui.$("route-common").disabled, true);
+  ui.$("route-results").querySelector("input").click();
+  assert.equal(ui.$("region").value, "east");
+  await ui.click("route-apply");
+  assert.equal(ui.$("region").value, "central");
+  assert.equal(ui.$("center").value, "352.625000");
+  assert.equal(ui.$("total-enabled").textContent, "3");
+  assert.equal(ui.calls.some((c) => c.command === "start"), false);
+  await ui.click("preset-browse");
+  await ui.click("route-open");
+  assert.equal(ui.$("route-no-data").hidden, false);
+  assert.equal(ui.$("route-apply").disabled, true);
+  await ui.click("route-close");
+  assert.equal(ui.$("all").disabled, false);
+});
+
 test("connection and output preferences survive restart without connecting or recording", async (t) => {
   const preferences = { value: null };
   const first = await setup(t, { preferences, configureConnection: false });

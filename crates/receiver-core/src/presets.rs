@@ -24,6 +24,20 @@ pub struct ReceivePreset {
     pub note: String,
     pub channel_notes: BTreeMap<String, String>,
     pub channels: Vec<ChannelConfig>,
+    #[serde(default)]
+    pub routes: Vec<Route>,
+}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Route {
+    pub id: String,
+    pub line: String,
+    pub section: String,
+    pub designation: String,
+    pub voice_hz: [u64; 2],
+    pub data_hz: u64,
+    #[serde(default)]
+    pub note: String,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -39,6 +53,8 @@ struct ChannelSet {
     region: Region,
     direction: Direction,
     channels: Vec<Channel>,
+    #[serde(default)]
+    routes: Vec<Route>,
 }
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -92,6 +108,43 @@ fn valid_id(id: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
 }
 
+fn validate_routes(set: &ChannelSet) -> Result<(), String> {
+    let invalid = || {
+        format!(
+            "{}: 路線の ID・区間・周波数の参照を確認してください",
+            set.id
+        )
+    };
+    if set.routes.len() > 512 {
+        return Err(invalid());
+    }
+    let text = |s: &str| !s.trim().is_empty() && s.chars().count() <= 200;
+    let mut ids = HashSet::new();
+    for route in &set.routes {
+        let voice = |hz| {
+            set.channels
+                .iter()
+                .any(|c| c.frequency_hz == hz && c.service == Service::Voice)
+        };
+        if !valid_id(&route.id)
+            || !ids.insert(&route.id)
+            || !text(&route.line)
+            || !text(&route.section)
+            || !text(&route.designation)
+            || route.note.chars().count() > 500
+            || route.voice_hz[0] == route.voice_hz[1]
+            || !route.voice_hz.iter().copied().all(voice)
+            || !set
+                .channels
+                .iter()
+                .any(|c| c.frequency_hz == route.data_hz && c.service == Service::Data)
+        {
+            return Err(invalid());
+        }
+    }
+    Ok(())
+}
+
 /// Validate the entire configuration before exposing any profiles.
 pub fn parse(text: &str) -> Result<Vec<ReceivePreset>, String> {
     let value: serde_json::Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
@@ -127,6 +180,7 @@ pub fn parse(text: &str) -> Result<Vec<ReceivePreset>, String> {
                 ));
             }
         }
+        validate_routes(set)?;
     }
     let mut ids = HashSet::new();
     let mut result = Vec::new();
@@ -181,6 +235,17 @@ pub fn parse(text: &str) -> Result<Vec<ReceivePreset>, String> {
             center_hz: center,
             sample_rate: rate,
             note: profile.note,
+            routes: set
+                .routes
+                .iter()
+                .filter(|r| {
+                    r.voice_hz
+                        .iter()
+                        .chain(std::iter::once(&r.data_hz))
+                        .all(|hz| channels.iter().any(|c| c.frequency_hz == *hz as f64))
+                })
+                .cloned()
+                .collect(),
             channel_notes: selected
                 .into_iter()
                 .filter(|c| !c.note.is_empty())
@@ -436,6 +501,74 @@ mod tests {
             }
             assert!(parse(&c.to_string()).is_err(), "{mutation}");
         }
+    }
+
+    #[test]
+    fn route_catalog_preserves_explicit_allocations_and_legacy_files() {
+        let catalog = parse(&configuration().to_string()).unwrap();
+        assert_eq!(
+            catalog.iter().map(|p| p.routes.len()).collect::<Vec<_>>(),
+            [112, 2, 19]
+        );
+        let east = &catalog[0];
+        let kofu = east
+            .routes
+            .iter()
+            .find(|r| r.line == "中央本線" && r.section == "甲府～小淵沢")
+            .unwrap();
+        assert_eq!(kofu.designation, "D6");
+        assert_eq!(kofu.voice_hz, [352612500, 352581250]);
+        assert_eq!(kofu.data_hz, 352662500);
+        let senseki = east.routes.iter().find(|r| r.line == "仙石線").unwrap();
+        assert_eq!(senseki.voice_hz, [352543750, 352606250]);
+        assert_eq!(senseki.data_hz, 352637500);
+        for preset in &catalog {
+            for route in &preset.routes {
+                assert!([route.voice_hz[0], route.voice_hz[1], route.data_hz]
+                    .iter()
+                    .all(|hz| preset.channels.iter().any(|c| c.frequency_hz == *hz as f64)));
+            }
+        }
+        let mut partial = configuration();
+        partial["profiles"][0]["services"] = json!(["data", "common"]);
+        assert!(parse(&partial.to_string()).unwrap()[0].routes.is_empty());
+        let mut legacy = configuration();
+        for set in legacy["channel_sets"].as_array_mut().unwrap() {
+            set.as_object_mut().unwrap().remove("routes");
+        }
+        let legacy = parse(&legacy.to_string()).unwrap();
+        assert_eq!(legacy[0].channels.len(), 22);
+        assert!(legacy.iter().all(|p| p.routes.is_empty()));
+    }
+
+    #[test]
+    fn invalid_route_references_are_rejected_before_installing_catalog() {
+        for (pointer, value) in [
+            ("/channel_sets/0/routes/0/id", json!("bad id")),
+            ("/channel_sets/0/routes/0/line", json!(" ")),
+            ("/channel_sets/0/routes/0/voice_hz", json!([352556250])),
+            (
+                "/channel_sets/0/routes/0/voice_hz",
+                json!([352556250, 352556250]),
+            ),
+            (
+                "/channel_sets/0/routes/0/voice_hz",
+                json!([352556250, 352631250]),
+            ),
+            ("/channel_sets/0/routes/0/data_hz", json!(352556250)),
+            ("/channel_sets/0/routes/0/data_hz", json!(1)),
+        ] {
+            let mut c = configuration();
+            *c.pointer_mut(pointer).unwrap() = value;
+            assert!(parse(&c.to_string()).is_err(), "{pointer}");
+        }
+        let mut c = configuration();
+        let first = c["channel_sets"][0]["routes"][0].clone();
+        c["channel_sets"][0]["routes"]
+            .as_array_mut()
+            .unwrap()
+            .push(first);
+        assert!(parse(&c.to_string()).is_err());
     }
 
     #[test]

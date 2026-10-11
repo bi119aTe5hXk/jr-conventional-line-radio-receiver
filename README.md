@@ -46,6 +46,7 @@ Use “再読み込み” (Reload) to apply edits, or “組み込みに戻す�
    For local hardware, choose “SoapySDR デバイス” (SoapySDR device) and use “検索” (Find) to select a device.
    Advanced settings accept SoapySDR arguments, an RX channel index, and an antenna name.
 2. Choose a receive profile and check the channels to receive. The default is the 22 channels allocated to JR East.
+   Alternatively, select **“路線から選ぶ” (Choose by line)** above the collapsed channel list. Search by line, section endpoint, or D number, select one or more sections, review their frequencies, then apply. Reception starts only when you select “受信を開始”. See [route selection and external route metadata](docs/ROUTES.md).
    The three built-in profiles cover JR East (22 channels), JR Central (3 channels), and JR West (19 channels), with only each operator's allocated frequencies.
    The default “簡易” (Compact) view shows frequency, allocation, and synchronization status in tiles that adapt to the window width.
    “詳細” (Detailed) shows the format and voice/data counts in a table. Switching views does not affect reception, recording, the selected channel, or search filters.

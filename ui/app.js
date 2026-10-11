@@ -2,6 +2,7 @@ import { makeInput } from "./config.mjs";
 import { buildCatalog } from "./presets.mjs";
 import { AudioPlayer } from "./audio.mjs";
 import { OperationMonitorView } from "./operation-monitor.mjs";
+import { RoutePicker } from "./route-picker.mjs";
 const operationMonitor = new OperationMonitorView(document);
 let sessionReplay = false;
 const $ = (id) => document.getElementById(id);
@@ -53,6 +54,23 @@ let bundledCatalog = [],
 let context, gain, audioPlayer;
 const rows = new Map(),
   messageNodes = new Map();
+const routePicker = new RoutePicker(document, async (preset, selection) => {
+  if (running || busy) throw new Error("受信を停止してから適用してください。");
+  if (preset.id !== activePresetId) {
+    $("region").value = preset.id;
+    await loadPresets(true);
+  }
+  enabled = new Set(selection.channels.map((c) => c.id));
+  // Reception targets do not change the listener's manual audio selection.
+  const names = selection.routes.slice(0, 2).map((r) => `${r.line}（${r.section}）`).join("、");
+  const more = selection.routes.length > 2 ? ` ほか${selection.routes.length - 2}区間` : "";
+  $("route-feedback").textContent =
+    `${names}${more} · ${enabled.size} 波を受信対象にしました。「受信を開始」で受信します。`;
+  setControls();
+  filterRows();
+  await persistPreferences();
+});
+$("route-open").addEventListener("click", () => routePicker.open(activePresetId, enabled));
 const kinds = {
   ServiceInformation: "旅客一斉情報",
   OperationSummary: "運行把握",
@@ -297,6 +315,8 @@ $("preferences-retry").addEventListener("click", async () => {
   } else await flushPreferences();
 });
 function setControls() {
+  $("route-open").disabled = busy || !presetCatalog.length;
+  routePicker.setBlocked(running || busy);
   $("settings").disabled = running || busy;
   $("region").disabled = running || busy || !channels.length;
   $("preset-browse").disabled = !native || running || busy;
@@ -515,6 +535,7 @@ function receiveCheck(c) {
   );
   check.addEventListener("change", () => {
     check.checked ? enabled.add(c.id) : enabled.delete(c.id);
+    $("route-feedback").textContent = "";
     setControls();
   });
   const label = el("label", undefined, "row-check");
@@ -870,6 +891,7 @@ async function loadPresets(applyTuning = false) {
     resetAudio();
     channels = next;
     activePresetId = id;
+    $("route-feedback").textContent = "";
     clearError();
     for (const metric of [
       "total-locked",
@@ -890,7 +912,7 @@ async function loadPresets(applyTuning = false) {
       Math.max(...channels.map((c) => c.frequency_hz)) / 1e6
     ).toFixed(5);
     $("band-note").textContent =
-      `${channels.length} 波 · 音声とデータを並列復号`;
+      `割当 ${channels.length} 波 · チェックした波を並列復号`;
     $("all-label").textContent = `全 ${channels.length} 波を受信`;
     $("preset-note").textContent =
       `${preset.note} 変則割当は選択波の詳細に表示。件数は受信開始からの累計。`;
@@ -925,6 +947,7 @@ function showPresetError(error) {
 function installCatalog(catalog, preferred) {
   const retained = catalog.some((p) => p.id === preferred);
   presetCatalog = catalog;
+  routePicker.setCatalog(catalog);
   $("region").replaceChildren(
     ...catalog.map((p) => {
       const option = el("option", p.label);
@@ -991,6 +1014,7 @@ $("device").addEventListener("change", () => {
 $("scan").addEventListener("click", scan);
 $("region").addEventListener("change", () => loadPresets(true).catch(fail));
 $("all").addEventListener("change", () => {
+  $("route-feedback").textContent = "";
   enabled = new Set($("all").checked ? channels.map((c) => c.id) : []);
   for (const [id, r] of rows) r.check.checked = enabled.has(id);
   setControls();
@@ -1019,7 +1043,7 @@ function updateSource() {
   $("source-hint").textContent = wave
     ? "I は左、Q は右のステレオ WAV。サンプルレートはファイルから取得します。"
     : tcp
-      ? `利用するサーバーの IP アドレスとポートを入力してください。接続設定は自動保存されます。${channels.length} 波を同時受信します。RTL-TCP は設定値の読み戻しとサーバー側の欠落通知に対応していません。`
+      ? "利用するサーバーの IP アドレスとポートを入力してください。接続設定は自動保存されます。選択した波を同時受信します。RTL-TCP は設定値の読み戻しとサーバー側の欠落通知に対応していません。"
       : "SoapySDR 対応デバイスを検索するか、詳細設定にデバイス引数を入力してください。接続設定は自動保存されます。";
 }
 $("input-kind").addEventListener("change", () => {
