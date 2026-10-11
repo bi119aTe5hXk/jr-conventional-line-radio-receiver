@@ -979,7 +979,7 @@ test("about dialog shows product and author, restores focus, and leaves receptio
   );
   assert.match(dialog.textContent, /JR Cconventional-line Radio Receiver/);
   assert.match(dialog.textContent, /JR 在来線デジタル列車無線受信アプリ/);
-  assert.match(dialog.textContent, /v1\.2\.0/);
+  assert.match(dialog.textContent, /v1\.3\.0/);
   assert.match(dialog.textContent, /KIRISHIKI Yudai/);
   assert.equal(
     dialog.querySelector("a").getAttribute("href"),
