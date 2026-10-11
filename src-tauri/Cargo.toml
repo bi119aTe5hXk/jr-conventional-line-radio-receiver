@@ -23,4 +23,3 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
-
