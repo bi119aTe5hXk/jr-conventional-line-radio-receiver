@@ -40,7 +40,9 @@ const emptyRecording = () => ({
   error: null,
 });
 let recordingStatus = emptyRecording(),
-  recordingActionError = "";
+  recordingActionError = "",
+  recordingEnabled = false,
+  recordingResumePending = false;
 let bundledCatalog = [],
   presetCatalog = [],
   presetFile = null,
@@ -149,7 +151,11 @@ function capturePreferences() {
     input: Object.fromEntries(
       Object.entries(preferenceFields).map(([key, id]) => [key, $(id).value]),
     ),
-    output: { directory: $("record-directory").value, ...outputOptions() },
+    output: {
+      enabled: recordingEnabled,
+      directory: $("record-directory").value,
+      ...outputOptions(),
+    },
   };
 }
 function persistPreferences() {
@@ -193,6 +199,7 @@ async function restorePreferences(initial = false) {
       preferenceError(error, true);
     }
   }
+  recordingEnabled = saved?.output.enabled === true;
   if (saved) {
     for (const [key, id] of Object.entries(preferenceFields))
       if (key !== "profile") $(id).value = saved.input[key];
@@ -337,10 +344,11 @@ function renderRecording() {
   $("output-options").disabled = busy || active;
   $("record-browse").disabled = !native || busy || active;
   $("record-start").disabled = !native || busy || !receiving || active;
-  $("record-stop").disabled = !native || busy || !active;
+  $("record-stop").disabled = !native || busy || (!active && !recordingEnabled);
+  $("record-stop").textContent = active ? "保存を停止" : "保存を無効にする";
   const label =
     {
-      idle: "未保存",
+      idle: recordingEnabled ? "保存待機" : "未保存",
       recording: "保存中",
       stopping: "保存を終了中",
       completed: "保存完了",
@@ -349,10 +357,20 @@ function renderRecording() {
   if ($("recording-state").textContent !== label)
     $("recording-state").textContent = label;
   $("recording-state").classList.toggle("active", active);
-  $("recording-summary").textContent =
+  const idleMessage = recordingEnabled
+    ? "受信開始後に自動で保存します。"
+    : receiving
+      ? "保存を開始できます。"
+      : "受信を開始してから保存できます。";
+  const summary =
     s.state === "idle"
-      ? `${receiving ? "保存を開始できます。" : "受信を開始してから保存できます。"}音声は 8 kHz・16 bit・モノラル。`
+      ? `${idleMessage}音声は 8 kHz・16 bit・モノラル。`
       : `WAV ${s.files} ファイル · 復号音声 ${(s.pcm_samples / 8000).toFixed(1)} 秒 · 生フレーム ${s.raw_frames ?? 0} 件 · データ電文 ${s.data_messages ?? 0} 件（全波合計）。受信停止時にも保存を終了します。`;
+  $("recording-summary").textContent =
+    summary +
+    (recordingEnabled && s.state !== "idle"
+      ? "次回受信時も自動で保存します。"
+      : "");
   if (s.directory) {
     $("recording-output").textContent =
       `${active ? "保存フォルダー" : "保存したフォルダー"}：${s.directory}`;
@@ -396,7 +414,8 @@ $("record-browse").addEventListener("click", async () => {
   }
   renderRecording();
 });
-$("record-start").addEventListener("click", async () => {
+async function startRecording(automatic = false) {
+  recordingResumePending = false;
   clearRecordingError();
   const directory = $("record-directory").value.trim();
   if (!directory) {
@@ -421,21 +440,28 @@ $("record-start").addEventListener("click", async () => {
     setControls();
     await flushPreferences();
     recordingStatus = await invoke("start_recording", { directory, options });
+    recordingEnabled = true;
+    await flushPreferences();
   } catch (e) {
     recordingActionError = String(e.message ?? e);
   } finally {
     busy = false;
     setControls();
-    if (!$("record-stop").disabled) $("record-stop").focus();
+    if (!automatic && !$("record-stop").disabled) $("record-stop").focus();
   }
-});
+}
+$("record-start").addEventListener("click", () => startRecording());
 $("record-stop").addEventListener("click", async () => {
   try {
     uiGeneration++;
     busy = true;
-    recordingStatus = { ...recordingStatus, state: "stopping" };
+    recordingEnabled = false;
+    recordingResumePending = false;
+    const active = ["recording", "stopping"].includes(recordingStatus.state);
+    if (active) recordingStatus = { ...recordingStatus, state: "stopping" };
     setControls();
-    recordingStatus = await invoke("stop_recording");
+    await flushPreferences();
+    if (active) recordingStatus = await invoke("stop_recording");
   } catch (e) {
     recordingActionError = String(e.message ?? e);
   } finally {
@@ -1033,6 +1059,7 @@ $("start").addEventListener("click", async () => {
     });
     running = true;
     recordingStatus = emptyRecording();
+    recordingResumePending = recordingEnabled;
     clearRecordingError();
     sessionVisible = true;
     lastSnapshot = null;
@@ -1064,6 +1091,7 @@ $("stop").addEventListener("click", async () => {
   try {
     uiGeneration++;
     busy = true;
+    recordingResumePending = false;
     setControls();
     resetAudio();
     if (recordingStatus.state === "recording") {
@@ -1207,6 +1235,14 @@ async function poll() {
         if (selectionCurrent) detail(c?.status ?? null);
         if (c?.error) fail(c.error);
         setControls();
+        if (recordingResumePending) {
+          if (!s.running) recordingResumePending = false;
+          else if (s.state === "receiving") {
+            recordingResumePending = false;
+            if (recordingEnabled && recordingStatus.state === "idle")
+              await startRecording(true);
+          }
+        }
       }
     }
   } catch (e) {

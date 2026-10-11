@@ -1,8 +1,13 @@
 const SAMPLE_RATE = 8000;
 const FRAME_SECONDS = 320 / SAMPLE_RATE;
-const BUFFER_SECONDS = 0.32;
+// Cover synthesis lookahead (120 ms) plus a delayed UI poll (up to 280 ms)
+// when the first half-second input burst arrives. Subsequent frames stay on
+// the same audio timeline.
+const BUFFER_SECONDS = 0.4;
 const MAX_GAP_SECONDS = 1;
-const MAX_BUFFER_SECONDS = 1;
+// Leave room for the initial lead, a half-second TCP burst, polling jitter,
+// and gradual clock correction without prematurely dropping valid PCM.
+const MAX_BUFFER_SECONDS = 1.5;
 
 // Schedule on the audio clock. IPC arrival times may jitter; they must never
 // cancel a frame that is still playing. Reset only on an explicit stop/switch

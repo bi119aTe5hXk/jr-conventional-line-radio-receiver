@@ -105,8 +105,8 @@ test("real frame loss preserves its silence and a long idle interval starts a ne
 test("exceptional bursts cannot build an unbounded playback queue or replay dropped frames", () => {
   const { player, nodes, advance } = setup();
   player.enqueue(burst(0, 100), "a");
-  assert.ok(nodes.at(-1).end <= 1);
-  assert.ok(player.sources.size <= 25);
+  assert.ok(nodes.at(-1).end <= 1.5);
+  assert.ok(player.sources.size <= 39);
   const count = nodes.length;
   const end = nodes.at(-1).end;
   advance(end - 0.1);
@@ -118,6 +118,46 @@ test("exceptional bursts cannot build an unbounded playback queue or replay drop
 });
 
 for (const clockRate of [0.999, 1, 1.001]) {
+  test(`half-second input bursts and ${clockRate}x input clock play without periodic gaps`, () => {
+    for (const intervals of [
+      [0.18],
+      [0.18, 0.16, 0.24, 0.14, 0.28, 0.1, 0.18, 0.2],
+    ]) {
+      const { player, nodes, advance } = setup();
+      let time = 0,
+        index = 0,
+        end,
+        count = 0;
+      for (let poll = 0; poll < 10000; poll++) {
+        // The UI polls independently of a source delivering 560 ms at once.
+        // Three frames remain in the voice decoder's synthesis lookahead.
+        advance(time);
+        const available = Math.max(
+          0,
+          Math.floor((time * clockRate) / 0.56) * 14 - 3,
+        );
+        player.enqueue(burst(index, available - index), "a");
+        for (const node of nodes) {
+          assert.ok(!node.stopped);
+          assert.ok(node.at >= time, `late frame at ${time}`);
+          assert.ok(node.end <= time + 1.5, `unbounded latency at ${time}`);
+          if (end !== undefined)
+            assert.ok(Math.abs(node.at - end) < 1e-9, `gap or overlap at ${time}`);
+          end = node.end;
+          count++;
+        }
+        nodes.length = 0;
+        // Include the partly played frame and a playback rate above 1.
+        assert.ok(player.sources.size <= 39);
+        index = available;
+        time += intervals[poll % intervals.length];
+      }
+      assert.equal(count, index, "no PCM frames dropped during batched delivery");
+      advance(end);
+      assert.equal(player.active, false);
+    }
+  });
+
   test(`30 minutes of bursty delivery and ${clockRate}x input clock stay continuous and bounded`, () => {
     const { player, nodes, advance } = setup();
     const intervals = [0.18, 0.16, 0.24, 0.14, 0.28, 0.1, 0.18, 0.2];

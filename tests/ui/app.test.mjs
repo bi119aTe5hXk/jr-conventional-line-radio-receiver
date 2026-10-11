@@ -202,6 +202,10 @@ async function setup(
               return args.options.filters?.[0]?.extensions.includes("json")
                 ? presetFiles.path
                 : folder;
+            if (command === "start") {
+              recording = { state: "idle", files: 0, pcm_samples: 0, error: null };
+              return null;
+            }
             if (command === "start_recording") {
               if (recordingError) throw new Error(recordingError);
               recording = {
@@ -369,6 +373,111 @@ test("connection and output preferences survive restart without connecting or re
     false,
   );
 });
+test("saving remains enabled across reception stops and restart, and an explicit saving stop persists", async (t) => {
+  const preferences = { value: null };
+  const first = await setup(t, { preferences });
+  await first.click("start");
+  await first.poll();
+  await first.click("record-start");
+  assert.equal(preferences.value.output.enabled, true);
+  await first.click("stop");
+  assert.equal(preferences.value.output.enabled, true);
+  assert.equal(first.$("record-stop").textContent, "保存を無効にする");
+
+  await first.click("start");
+  await first.poll();
+  assert.equal(first.$("recording-state").textContent, "保存中");
+  assert.equal(
+    first.calls.filter((c) => c.command === "start_recording").length,
+    2,
+  );
+  await first.closeWindow();
+
+  const second = await setup(t, { preferences, configureConnection: false });
+  assert.equal(second.$("recording-state").textContent, "保存待機");
+  assert.equal(
+    second.calls.some((c) => ["start", "start_recording"].includes(c.command)),
+    false,
+  );
+  await second.click("start");
+  second.setSnapshot({ status: { ...status(), state: "starting" }, audio: [] });
+  await second.poll();
+  assert.equal(second.calls.some((c) => c.command === "start_recording"), false);
+  second.setSnapshot({ status: status(), audio: [] });
+  await second.poll();
+  await second.poll();
+  assert.equal(
+    second.calls.filter((c) => c.command === "start_recording").length,
+    1,
+  );
+  assert.equal(second.$("recording-state").textContent, "保存中");
+  await second.click("record-stop");
+  assert.equal(preferences.value.output.enabled, false);
+  assert.equal(second.$("stop").disabled, false);
+  const third = await setup(t, { preferences, configureConnection: false });
+  await third.click("start");
+  await third.poll();
+  assert.equal(third.calls.some((c) => c.command === "start_recording"), false);
+});
+
+test("restored saving can be disabled before reception without touching the recorder", async (t) => {
+  const first = await setup(t);
+  await first.click("start");
+  await first.poll();
+  await first.click("record-start");
+  const second = await setup(t, {
+    preferences: first.preferences,
+    configureConnection: false,
+  });
+  assert.equal(second.$("record-stop").disabled, false);
+  await second.click("record-stop");
+  assert.equal(first.preferences.value.output.enabled, false);
+  assert.equal(second.$("recording-state").textContent, "未保存");
+  assert.equal(
+    second.calls.some((c) =>
+      ["start_recording", "stop_recording"].includes(c.command),
+    ),
+    false,
+  );
+  await second.click("start");
+  await second.poll();
+  assert.equal(second.calls.some((c) => c.command === "start_recording"), false);
+});
+
+test("automatic saving errors do not loop or stop reception, and EOF retains the saved choice", async (t) => {
+  const first = await setup(t);
+  await first.click("start");
+  await first.poll();
+  await first.click("record-start");
+  first.setSnapshot({
+    status: {
+      ...status(),
+      running: false,
+      state: "completed",
+      recording: { state: "completed", files: 0, pcm_samples: 0, error: null },
+    },
+    audio: [],
+  });
+  await first.poll();
+  assert.equal(first.preferences.value.output.enabled, true);
+  const second = await setup(t, {
+    preferences: first.preferences,
+    recordingError: "書き込めません",
+  });
+  await second.click("start");
+  await second.poll();
+  await second.poll();
+  assert.equal(
+    second.calls.filter((c) => c.command === "start_recording").length,
+    1,
+  );
+  assert.equal(second.$("recording-error").hidden, false);
+  assert.equal(second.$("stop").disabled, false);
+  assert.equal(first.preferences.value.output.enabled, true);
+  await second.click("record-stop");
+  assert.equal(first.preferences.value.output.enabled, false);
+});
+
 test("editing during an in-flight save and closing waits for the latest settings", async (t) => {
   const preferences = { value: null };
   const ui = await setup(t, { preferences, configureConnection: false });
@@ -1155,7 +1264,8 @@ test("receiving stop finalizes recording and leaves the saved folder visible", a
   await ui.poll();
   assert.equal(ui.$("recording-state").textContent, "保存完了");
   assert.equal(ui.$("record-start").disabled, true);
-  assert.equal(ui.$("record-stop").disabled, true);
+  assert.equal(ui.$("record-stop").disabled, false);
+  assert.equal(ui.$("record-stop").textContent, "保存を無効にする");
   assert.match(ui.$("recording-output").textContent, /recording-test/);
   assert.equal(ui.$("recording-output").hidden, false);
 });

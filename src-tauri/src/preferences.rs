@@ -1,4 +1,4 @@
-//! Versioned user preferences; device access and recording are never restored.
+//! Versioned user preferences; reception always requires an explicit start.
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, OpenOptions},
@@ -69,6 +69,7 @@ impl Default for InputSettings {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct OutputSettings {
+    pub enabled: bool,
     pub directory: Option<String>,
     pub audio: bool,
     pub raw_frames: bool,
@@ -77,6 +78,7 @@ pub struct OutputSettings {
 impl Default for OutputSettings {
     fn default() -> Self {
         Self {
+            enabled: false,
             directory: None,
             audio: true,
             raw_frames: false,
@@ -277,11 +279,13 @@ mod tests {
         p.input.antenna = "RX".into();
         p.input.rx_channel = "1".into();
         p.output.directory = Some("/tmp/受信データ".into());
+        p.output.enabled = true;
         p.output.audio = false;
         p.output.raw_frames = true;
         Store::default().save(&path, &p).unwrap();
         assert_eq!(Store::default().load(&path).unwrap(), Some(p.clone()));
         p.input.port.clear();
+        p.output.enabled = false;
         p.output.directory = Some(String::new());
         Store::default().save(&path, &p).unwrap();
         assert_eq!(Store::default().load(&path).unwrap(), Some(p));
@@ -320,6 +324,7 @@ mod tests {
         let mut p = store.load(&path).unwrap().unwrap();
         assert!(p.input.host.is_empty() && p.input.port.is_empty());
         assert!(p.output.audio && p.output.raw_frames);
+        assert!(!p.output.enabled);
         assert!(p.output.directory.is_none());
         assert!(p.preset_file.is_none());
         let old = fs::read(&path).unwrap();

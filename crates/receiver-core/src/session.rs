@@ -44,6 +44,7 @@ struct Channel {
     status: ChannelStatus,
     audio: VecDeque<(u64, Audio)>,
     progress_us: u64,
+    monitored: bool,
 }
 #[derive(Clone, Serialize)]
 pub struct Overview {
@@ -191,6 +192,7 @@ impl Session {
                     },
                     audio: VecDeque::new(),
                     progress_us: 0,
+                    monitored: false,
                 }))
             })
             .collect();
@@ -279,14 +281,23 @@ impl Session {
             .map(|c| {
                 let mut c = c.lock().unwrap();
                 let mut status = c.status.clone();
-                while c
-                    .audio
-                    .front()
-                    .is_some_and(|(time, _)| time.saturating_add(600_000) < c.progress_us)
-                {
-                    c.audio.pop_front();
+                let monitored = selected == Some(status.config.id.as_str());
+                // Freshness applies when entering a channel, not to an
+                // ongoing stream. TCP can deliver over half a second at once;
+                // synthesis lookahead makes the first PCM older than 600 ms.
+                // Pruning that PCM on every poll punched holes in live audio
+                // while the recording (written before this queue) stayed intact.
+                if !monitored || !c.monitored {
+                    while c
+                        .audio
+                        .front()
+                        .is_some_and(|(time, _)| time.saturating_add(600_000) < c.progress_us)
+                    {
+                        c.audio.pop_front();
+                    }
                 }
-                if selected == Some(status.config.id.as_str()) {
+                c.monitored = monitored;
+                if monitored {
                     audio.extend(c.audio.drain(..).map(|(_, a)| a));
                 } else {
                     status.status.messages.clear();
@@ -728,8 +739,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn automatic_snapshot_delivers_chosen_audio_and_manual_selection_remains_authoritative() {
+    fn monitor_test_session() -> Session {
         let configs = crate::pipeline::presets("east")[..2].to_vec();
         let monitor = Arc::new(Mutex::new(Monitor::new(
             configs.iter().map(|c| c.id.clone()),
@@ -742,7 +752,7 @@ mod tests {
             .lock()
             .unwrap()
             .update(0, 400_000, vec![Activity::Voice(200_000)]);
-        let session = Session {
+        Session {
             stop: Arc::new(AtomicBool::new(false)),
             shared: Arc::new(Mutex::new(Shared {
                 state: "receiving".into(),
@@ -764,6 +774,7 @@ mod tests {
                             error: None,
                         },
                         progress_us: 400_000,
+                        monitored: false,
                         audio: VecDeque::from([(
                             200_000,
                             Audio {
@@ -779,7 +790,59 @@ mod tests {
             thread: None,
             recorder: Arc::new(Recorder::default()),
             monitor,
-        };
+        }
+    }
+
+    #[test]
+    fn selected_audio_survives_half_second_delivery_bursts() {
+        for automatic in [false, true] {
+            let session = monitor_test_session();
+            let configs = crate::pipeline::presets("east");
+            // Both selection modes keep listening to the first active call.
+            let id = &configs[1].id;
+            assert_eq!(
+                session.snapshot_with_monitor(Some(id), automatic).1.len(),
+                1
+            );
+            for batch in 0..100 {
+                let first = 1 + batch * 14;
+                let mut c = session.channels[1].lock().unwrap();
+                for index in first..first + 14 {
+                    c.audio.push_back((
+                        200_000 + index as u64 * 40_000,
+                        Audio {
+                            channel: id.clone(),
+                            epoch: 0,
+                            index,
+                            pcm: vec![42; 320],
+                        },
+                    ));
+                }
+                // 560 ms of PCM arrives together, with 120 ms synthesis
+                // lookahead plus the final 40 ms radio frame already read.
+                c.progress_us = 200_000 + (first + 13) as u64 * 40_000 + 160_000;
+                drop(c);
+                let (status, audio) = session.snapshot_with_monitor(Some(id), automatic);
+                assert_eq!(
+                    audio.iter().map(|a| a.index).collect::<Vec<_>>(),
+                    (first..first + 14).collect::<Vec<_>>(),
+                    "selected audio lost in batch {batch}, automatic={automatic}"
+                );
+                assert_eq!(status.channels[1].audio_drops, 0);
+                // Empty UI polls between network bursts must preserve the
+                // selection and cannot make the next burst stale again.
+                assert!(session
+                    .snapshot_with_monitor(Some(id), automatic)
+                    .1
+                    .is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn automatic_snapshot_delivers_chosen_audio_and_manual_selection_remains_authoritative() {
+        let session = monitor_test_session();
+        let configs = crate::pipeline::presets("east");
         let (status, audio) = session.snapshot_with_monitor(Some(&configs[0].id), true);
         assert_eq!(
             status.selected_channel.as_deref(),

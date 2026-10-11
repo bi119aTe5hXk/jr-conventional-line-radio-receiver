@@ -89,10 +89,10 @@ The desktop app saves setting changes automatically and restores them on the nex
 - External preset file path, or no path when using the built-in presets.
 - RTL-TCP IP address, port, and frequency correction.
 - SoapySDR device arguments, RX channel index, and antenna; IQ WAV file path.
-- Output directory and the selected WAV, raw-frame JSONL, and data-message JSONL formats.
+- Whether saving is enabled, the output directory, and the selected WAV, raw-frame JSONL, and data-message JSONL formats.
 
 Saved center frequencies and sample rates are not overwritten by profile defaults at startup.
-Folder selections and intentionally empty fields are also retained. Startup restores settings only; reception and recording begin when you select their start buttons.
+Folder selections and intentionally empty fields are also retained. Startup restores settings only; reception begins when you select its start button. If saving was enabled, it resumes automatically once reception is ready.
 Closing the window normally waits for pending setting writes, including recent input changes.
 
 Settings are stored as versioned JSON in `settings.json` under Tauri's application configuration directory.
@@ -116,11 +116,13 @@ A 120 ms decision delay accounts for synchronization acquisition; ties use prese
 Call completion is inferred when valid voice frames stop for **one second**, rather than from volume or silent PCM.
 Short reception gaps preserve priority. Calls that end while waiting are skipped. IQ loss or resynchronization resets call state.
 On switching channels, playback begins with audio from within the last 600 ms; it does not replay the entire queued call.
+This age limit applies to channel entry and unselected channels. While listening to the same channel, queued PCM is kept in sequence, including when RTL-TCP delivers roughly half a second of input at once. The five-second queue capacity still bounds memory use.
 The voice synthesis tail is emitted even after a brief loss of signal. While a channel is manually pinned, late automatic-selection responses are ignored.
 
 ## Recording and data output
 
 Once the receiver shows “受信中” (Receiving), select **“保存を開始” (Start saving)** under “録音・データ保存” (Recording and data output).
+This enables saving for subsequent receive sessions, including after restarting the app. Stopping reception, reaching EOF, or closing the app keeps that choice. “保存を停止” (Stop saving), or “保存を無効にする” (Disable saving) while idle, disables it persistently. Existing settings without this preference default to disabled. A failed automatic start displays an error without repeatedly retrying or stopping reception.
 The “保存内容・保存先” (Output formats and destination) section is collapsed initially. Expand it to choose WAV, raw-frame JSONL, data-message JSONL, and the output directory, or to view the saved session folder.
 Formats can be selected independently, including JSONL-only output. Stop saving before changing them.
 Status and start/stop controls remain visible. An error expands the settings, and its message remains visible if they are collapsed again.
@@ -227,7 +229,7 @@ Source overflow or queue loss invalidates continuity for the affected stream and
 IQ queues hold eight blocks per channel. The TCP input queue holds 32 blocks to absorb bursts, or up to 1.28 seconds at 240 kS/s.
 TCP header reads time out after three seconds; five seconds without stream data is an error. Disconnects are distinguished from normal completion.
 UI snapshots update roughly every 180 ms. Data history is limited to 128 messages per channel, and the audio monitor queue to five seconds.
-Live playback starts with a 320 ms jitter buffer and schedules subsequent PCM frames continuously on the audio clock, before rendering UI details. Small arrival delays do not cancel playing audio. A gradual playback-rate adjustment (at most ±0.5%) compensates for receiver/output clock drift; the scheduled playback queue is capped at one second. These adjustments affect monitoring only, not recorded WAV samples.
+Live playback starts with a 400 ms jitter buffer and schedules subsequent PCM frames continuously on the audio clock, before rendering UI details. Small arrival delays do not cancel playing audio. A gradual playback-rate adjustment (at most ±0.5%) compensates for receiver/output clock drift; the scheduled playback queue is capped at 1.5 seconds to accommodate batched input and poll jitter. These adjustments affect monitoring only, not recorded WAV samples.
 Stopping joins input and processing threads. Restarting creates fresh state.
 
 ```sh
