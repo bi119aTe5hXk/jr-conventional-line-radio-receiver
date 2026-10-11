@@ -1,6 +1,6 @@
 //! Classify and synthesize the two production chime families.
 use crate::models::chime_data as m;
-use crate::numeric::{round_even, sample, PI};
+use crate::numeric::{sample, PI};
 use crate::predictor::{native_bit, Controls, FeatureRecord};
 use crate::vocoder::{Pcm, Vocoder, VoiceNoise};
 
@@ -221,19 +221,22 @@ impl ChimeSynth {
         self.family = family;
         Ok(())
     }
-    pub fn blend(&self, end: bool, pcm: &mut Pcm) {
-        if self.family == 0 {
-            return;
-        }
-        for (i, x) in pcm.iter_mut().enumerate() {
-            let mut gain = 1.0;
-            if self.old_family != self.family && i < 40 {
-                gain = 0.5 - 0.5 * (PI * i as f32 / 39.0).cos();
+    pub fn mix_coefficients(&self, end: bool) -> ([f32; 320], [f32; 320]) {
+        let mut weight = [1.0; 320];
+        let mut offset = [0.0; 320];
+        if self.family != 0 {
+            for i in 0..320 {
+                let mut gain = 1.0;
+                if self.old_family != self.family && i < 40 {
+                    gain = 0.5 - 0.5 * (PI * i as f32 / 39.0).cos();
+                }
+                if end && i >= 280 {
+                    gain = 0.5 + 0.5 * (PI * (i - 280) as f32 / 39.0).cos();
+                }
+                weight[i] = 1.0 - gain;
+                offset[i] = self.replacement[i] as f32 * gain;
             }
-            if end && i >= 280 {
-                gain = 0.5 + 0.5 * (PI * (i - 280) as f32 / 39.0).cos();
-            }
-            *x = round_even(self.replacement[i] as f32 * gain + *x as f32 * (1.0 - gain)) as i16;
         }
+        (weight, offset)
     }
 }
