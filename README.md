@@ -73,7 +73,16 @@ Hardware support depends on the available [SoapySDR drivers](https://github.com/
 
 The overview shows the number of enabled and synchronized channels, valid data messages, voice frames, and dropped processing blocks.
 Search only filters the visible list; it does not change which channels are received.
-“更新を一時停止” (Pause updates) freezes the displayed data while decoding continues. On narrow screens, the detailed list becomes cards.
+The channel list and selected-channel monitor start collapsed. Open their headers when you need channel selection, reception diagnostics, or playback settings; closing them keeps reception, audio, and data updates running. The operation monitor and received data appear side by side on wide screens, with navigation links above them. Audio on/off stays visible, and the received-data panel shows its selected frequency and a link to open the channel list. Preset errors and channel-selection validation reveal the relevant controls automatically.
+“更新を一時停止” (Pause updates) freezes the selected channel’s message log while decoding and the operation monitor continue. On narrow screens, the detailed list becomes cards.
+
+“運行把握モニタ” (Operation monitor), below the channel list, shows line-level delay counts, trains on the line, three delay classes, maximum delay, and its train number from supported JR East common-wave messages. Enable the common channel with the “一斉” format. The table updates independently of audio selection, saving, and the message-log pause. Narrow layouts show each line as a labeled record; missing values say “不明” (Unknown), rather than zero.
+
+The operation monitor does not interpret message timestamps until the prefix format is established. It displays only the computer's last reception time in Japan time, labeled as the last read time during IQ WAV playback. This time does not indicate when the information was created or guarantee that it describes current service conditions. No age or chronological priority is inferred from the operation prefix.
+
+Complete, validated tables replace the display in receive order. An identical prefix and decompressed table update the last reception time and repeat count; a changed prefix or table starts a new count. IQ loss retains the last complete table and its reception time. Starting a new receive session or changing the preset clears it.
+
+The initial decoder supports the verified `0x22 / C9` common-wave form with an 11-byte prefix, an LH5 archive, and a `0x87` table containing seven 21-byte rows. RS/CRC validation and archive header/content checks are required. Other layouts are not inferred from partial data.
 
 RTL-TCP accepts IPv4 or IPv6 addresses. Supported requested sample rates are 225001–300000 or 900001–3200000 S/s.
 An empty gain field selects tuner automatic gain; a number selects manual gain. Frequency correction in ppm must be an integer.
@@ -159,6 +168,8 @@ The UI history limit, paused display, and duplicate aggregation do not affect ou
 | --- | --- |
 | `raw-frames.jsonl` | Each 48-byte radio frame extracted by the synchronizer, retained in reception order as a 96-character `raw_hex` string before descrambling or error correction. Includes frames that fail voice or data validation. Does not contain IQ samples. |
 | `data-messages.jsonl` | One `message` per decoder output, including its type, identity, transmission timestamp when available, decoded fields, message `raw_hex`, and frame range. Includes voice-channel information and uninterpreted message types. Fragmented messages are emitted after assembly. |
+
+Operation tables use `message.kind: "OperationSummary"` and an additional `message.operation_summary` object. Its `rows` contain `line`, `delayed`, `on_line`, `delay_classes` (3–9, 10–19, 20+ minutes), `max_delay_min`, `train_no`, and the original row `raw_hex`; unavailable numeric/train fields are JSON `null`. `message.timestamp` is always JSON `null` for operation tables; the outer `received_at` remains the computer's decoding time. The unknown prefix bytes are not parsed or validated as a date, and reception time is not substituted for message time. `message.raw_hex` preserves the assembled compressed body; `prefix_hex` and `expanded_hex` preserve the prefix and decompressed table. `prefix_sum_matches` records an observed byte-sum relationship whose general protocol meaning is unconfirmed; it is not an additional verified checksum guarantee. The class labels follow the supplied reference display.
 
 Both formats include `schema_version: 1`, `received_at`, `channel_id`, `label`, `frequency_hz`, `format`, `epoch`, `index`, and `bit_offset`.
 `received_at` is the computer's UTC time at decoding, not the transmitter's clock.

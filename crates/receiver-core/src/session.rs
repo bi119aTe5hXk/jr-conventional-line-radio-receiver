@@ -794,6 +794,53 @@ mod tests {
     }
 
     #[test]
+    fn operation_monitor_survives_selection_filter_without_changing_audio_choice() {
+        let session = monitor_test_session();
+        let message = crate::data::synthetic_operation();
+        {
+            let mut channel = session.channels[0].lock().unwrap();
+            crate::data::OperationReception::update(
+                &mut channel.status.status.operation_monitor,
+                &message,
+                "2025-03-14T00:27:00Z".into(),
+            );
+            channel
+                .status
+                .status
+                .messages
+                .push(crate::pipeline::Received {
+                    message,
+                    receptions: 1,
+                });
+        }
+        for automatic in [false, true] {
+            let id = session.channels[1].lock().unwrap().status.config.id.clone();
+            let (status, _) = session.snapshot_with_monitor(Some(&id), automatic);
+            assert_eq!(status.selected_channel.as_deref(), Some(id.as_str()));
+            assert!(status.channels[0].status.messages.is_empty());
+            assert_eq!(
+                status.channels[0]
+                    .status
+                    .operation_monitor
+                    .as_ref()
+                    .unwrap()
+                    .summary
+                    .rows
+                    .len(),
+                7
+            );
+            assert_eq!(status.channels[1].config.id, id);
+        }
+        // A new session cannot inherit the previous source's received table.
+        assert!(monitor_test_session()
+            .snapshot(None)
+            .0
+            .channels
+            .iter()
+            .all(|c| c.status.operation_monitor.is_none()));
+    }
+
+    #[test]
     fn selected_audio_survives_half_second_delivery_bursts() {
         for automatic in [false, true] {
             let session = monitor_test_session();

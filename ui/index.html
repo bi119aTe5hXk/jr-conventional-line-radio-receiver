@@ -15,7 +15,7 @@
     <script type="module" src="app.js"></script>
   </head>
   <body>
-    <a class="skip-link" href="#channels-title">チャンネル一覧へ移動</a>
+    <a class="skip-link" href="#operation-title">運行把握モニタへ移動</a>
     <header class="topbar">
       <div class="brand">
         <img
@@ -267,127 +267,134 @@
         </details>
         <p id="recording-error" class="field-error" role="alert" hidden></p>
       </section>
+      <div class="workspace-navigation">
+        <nav aria-label="受信情報への移動">
+          <a href="#operation-title">運行把握モニタ</a>
+          <a href="#messages-title">受信データ</a>
+        </nav>
+        <div class="listening-control">
+          <label class="check-label listen" for="listen"
+            ><input id="listen" type="checkbox" checked />音声を聴く</label
+          >
+          <span id="audio-state" class="muted">音声待機</span>
+        </div>
+      </div>
       <div class="workspace">
-        <section class="card channels" aria-labelledby="channels-title">
-          <div class="section-title">
-            <div>
-              <h2 id="channels-title" tabindex="-1">チャンネル一覧</h2>
-              <p id="channel-count">22 波を選択 · 待機</p>
-            </div>
-            <label class="region" for="region"
-              >受信プリセット<select id="region" disabled>
-                <option value="east">受信設定を読み込み中</option>
-              </select></label
-            >
-          </div>
-          <details id="preset-settings" class="preset-settings">
-            <summary>
-              プリセットファイル · <span id="preset-source">組み込み</span>
+        <div class="workspace-tools">
+          <details id="channels-panel" class="card channels panel-disclosure">
+            <summary id="channels-title" class="panel-summary">
+              <h2>チャンネル一覧</h2>
+              <span id="channel-count" class="panel-summary-meta">22 波を選択 · 待機</span>
             </summary>
-            <p id="preset-path" dir="auto" hidden></p>
-            <div class="preset-actions">
-              <button id="preset-browse" type="button">
-                JSON ファイルを選択
-              </button>
-              <button id="preset-reload" type="button" disabled>
-                再読み込み
-              </button>
-              <button id="preset-builtin" type="button" disabled>
-                組み込みに戻す
-              </button>
-            </div>
-            <p>
-              停止中に変更できます。選択したファイルは次回起動時にも読み込みます。
-            </p>
-          </details>
-          <p id="preset-status" class="preset-feedback" role="status"></p>
-          <p
-            id="preset-error"
-            class="preset-feedback field-error"
-            role="alert"
-            hidden
-          ></p>
-          <div class="channel-toolbar">
-            <label for="channel-search" class="search-label"
-              ><span class="sr-only">周波数・割当を検索</span
-              ><input
-                id="channel-search"
-                type="search"
-                placeholder="周波数・割当を検索"
-                autocomplete="off"
-                aria-describedby="filter-note" /></label
-            ><label class="check-label" for="all"
-              ><input id="all" type="checkbox" checked /><span id="all-label"
-                >全 22 波を受信</span
-              ></label
-            >
-            <div
-              class="view-switch"
-              role="group"
-              aria-label="チャンネル一覧の表示"
-            >
-              <button
-                id="view-simple"
-                type="button"
-                aria-pressed="true"
-                aria-controls="channels-simple channels-table"
-              >
-                簡易
-              </button>
-              <button
-                id="view-detailed"
-                type="button"
-                aria-pressed="false"
-                aria-controls="channels-simple channels-table"
-              >
-                詳細
-              </button>
-            </div>
-          </div>
-          <div class="filter-note">
-            <span id="filter-note">検索は表示だけを絞り込みます</span
-            ><a href="#monitor-title">選択波の詳細へ</a>
-          </div>
-          <ul
-            id="channels-simple"
-            class="channel-grid"
-            role="list"
-            aria-label="チャンネルの簡易一覧"
-          ></ul>
-          <table id="channels-table" aria-label="周波数ごとの受信状態" hidden>
-            <thead>
-              <tr>
-                <th scope="col">受信</th>
-                <th scope="col">周波数 MHz / 割当</th>
-                <th scope="col">形式</th>
-                <th scope="col">同期</th>
-                <th scope="col" class="numeric">音声</th>
-                <th scope="col" class="numeric">データ</th>
-              </tr>
-            </thead>
-            <tbody id="channels"></tbody>
-          </table>
-          <div id="no-channels" class="empty compact" hidden>
-            <h3>一致するチャンネルがありません</h3>
-            <p>周波数の一部や D1 などの割当で検索できます。</p>
-            <button id="clear-search">検索を解除</button>
-          </div>
-          <p id="search-status" class="sr-only" role="status"></p>
-          <div class="table-note" id="preset-note">
-            割当情報を読み込み中です。件数は受信開始からの累計です。
-          </div>
-        </section>
-        <section class="detail" aria-labelledby="monitor-title">
-          <div class="card monitor">
             <div class="section-title">
-              <div>
-                <p class="eyebrow">Selected channel</p>
-                <h2 id="monitor-title" tabindex="-1">選択波のモニター</h2>
-              </div>
-              <label class="check-label listen" for="listen"
-                ><input id="listen" type="checkbox" checked />音声を聴く</label
+              <label class="region" for="region"
+                >受信プリセット<select id="region" disabled>
+                  <option value="east">受信設定を読み込み中</option>
+                </select></label
               >
             </div>
+            <details id="preset-settings" class="preset-settings">
+              <summary>
+                プリセットファイル · <span id="preset-source">組み込み</span>
+              </summary>
+              <p id="preset-path" dir="auto" hidden></p>
+              <div class="preset-actions">
+                <button id="preset-browse" type="button">
+                  JSON ファイルを選択
+                </button>
+                <button id="preset-reload" type="button" disabled>
+                  再読み込み
+                </button>
+                <button id="preset-builtin" type="button" disabled>
+                  組み込みに戻す
+                </button>
+              </div>
+              <p>
+                停止中に変更できます。選択したファイルは次回起動時にも読み込みます。
+              </p>
+            </details>
+            <p id="preset-status" class="preset-feedback" role="status"></p>
+            <p
+              id="preset-error"
+              class="preset-feedback field-error"
+              role="alert"
+              hidden
+            ></p>
+            <div class="channel-toolbar">
+              <label for="channel-search" class="search-label"
+                ><span class="sr-only">周波数・割当を検索</span
+                ><input
+                  id="channel-search"
+                  type="search"
+                  placeholder="周波数・割当を検索"
+                  autocomplete="off"
+                  aria-describedby="filter-note" /></label
+              ><label class="check-label" for="all"
+                ><input id="all" type="checkbox" checked /><span id="all-label"
+                  >全 22 波を受信</span
+                ></label
+              >
+              <div
+                class="view-switch"
+                role="group"
+                aria-label="チャンネル一覧の表示"
+              >
+                <button
+                  id="view-simple"
+                  type="button"
+                  aria-pressed="true"
+                  aria-controls="channels-simple channels-table"
+                >
+                  簡易
+                </button>
+                <button
+                  id="view-detailed"
+                  type="button"
+                  aria-pressed="false"
+                  aria-controls="channels-simple channels-table"
+                >
+                  詳細
+                </button>
+              </div>
+            </div>
+            <div class="filter-note">
+              <span id="filter-note">検索は表示だけを絞り込みます</span
+              ><a href="#monitor-title">選択波の詳細へ</a>
+            </div>
+            <ul
+              id="channels-simple"
+              class="channel-grid"
+              role="list"
+              aria-label="チャンネルの簡易一覧"
+            ></ul>
+            <table id="channels-table" aria-label="周波数ごとの受信状態" hidden>
+              <thead>
+                <tr>
+                  <th scope="col">受信</th>
+                  <th scope="col">周波数 MHz / 割当</th>
+                  <th scope="col">形式</th>
+                  <th scope="col">同期</th>
+                  <th scope="col" class="numeric">音声</th>
+                  <th scope="col" class="numeric">データ</th>
+                </tr>
+              </thead>
+              <tbody id="channels"></tbody>
+            </table>
+            <div id="no-channels" class="empty compact" hidden>
+              <h3>一致するチャンネルがありません</h3>
+              <p>周波数の一部や D1 などの割当で検索できます。</p>
+              <button id="clear-search">検索を解除</button>
+            </div>
+            <p id="search-status" class="sr-only" role="status"></p>
+            <div class="table-note" id="preset-note">
+              割当情報を読み込み中です。件数は受信開始からの累計です。
+            </div>
+          </details>
+          <details id="monitor-panel" class="card monitor panel-disclosure">
+            <summary id="monitor-title" class="panel-summary">
+              <h2>選択波モニタ</h2>
+              <span id="monitor-summary" class="panel-summary-meta">選択波を読み込み中</span>
+            </summary>
             <div class="monitor-selection">
               <label class="check-label" for="auto-select"
                 ><input
@@ -465,39 +472,72 @@
                   max="100"
                   value="70"
                 /><output id="volume-value" for="volume">70%</output></label
-              ><span id="audio-state" class="muted">音声待機</span>
+              >
             </div>
             <details class="decoder-options">
               <summary>選択波の復号設定</summary>
               <label for="selected-format"
                 >データ形式<select id="selected-format">
                   <option value="slotted">通常（時分割データ）</option>
-                  <option value="common">一斉（旅客一斉情報）</option>
+                  <option value="common">一斉（旅客情報・運行把握）</option>
                 </select></label
               >
               <p class="field-hint">受信を停止してから変更できます。</p>
             </details>
             <p class="hint" id="monitor-note">
-              音声とデータは全受信チャンネルで復号します。ここで選んだ波の音声を再生します。
+              音声とデータは全受信チャンネルで復号します。選択中の波の音声を再生します。
             </p>
+          </details>
+        </div>
+        <section class="card operation-monitor" aria-labelledby="operation-title">
+          <div class="section-title">
+            <div>
+              <h2 id="operation-title" tabindex="-1">運行把握モニタ</h2>
+              <p>線区別の遅延・在線情報</p>
+            </div>
+            <span id="operation-state" class="badge" role="status">情報待ち</span>
           </div>
-          <section class="card messages" aria-labelledby="messages-title">
-            <div class="section-title">
-              <div>
-                <p class="eyebrow">Decoded data</p>
-                <h2 id="messages-title">受信データ</h2>
-                <p id="data-status">RS / CRC 検証済みの情報を表示</p>
-              </div>
-              <span id="message-count" class="badge">0 件</span>
+          <div id="operation-empty" class="empty compact">
+            <h3 id="operation-empty-title">線区別の情報を待っています</h3>
+            <p id="operation-empty-hint">共用波を含めて受信を開始してください。</p>
+            <a href="#channels-title">受信チャンネルを確認</a>
+          </div>
+          <div id="operation-content" hidden>
+            <dl class="operation-times">
+              <div><dt id="operation-received-label">最終受信日時</dt><dd id="operation-received-time">不明</dd></div>
+            </dl>
+            <p class="operation-note">受信日時は情報の作成日時ではありません。現在の運行状況を示すとは限りません。受信日時は日本時間で表示します。</p>
+            <table class="operation-table">
+              <caption class="sr-only">電文に含まれる線区別の遅延と在線数。不明は未提供の値です。</caption>
+              <thead><tr>
+                <th scope="col">線区</th><th scope="col">遅延 / 在線</th>
+                <th scope="col">3～9分</th><th scope="col">10～19分</th>
+                <th scope="col">20分以上</th><th scope="col">最大遅延</th><th scope="col">その列車</th>
+              </tr></thead>
+              <tbody id="operation-rows"></tbody>
+            </table>
+            <div class="operation-footnote"><span id="operation-source"></span><span id="operation-repetitions"></span></div>
+          </div>
+        </section>
+        <section class="card messages" aria-labelledby="messages-title">
+          <div class="section-title">
+            <div>
+              <h2 id="messages-title" tabindex="-1">受信データ</h2>
+              <p id="data-status">RS / CRC 検証済みの情報を表示</p>
             </div>
-            <div class="message-toolbar">
-              <span id="message-scope">選択波の最新 128 件まで</span
-              ><button id="pause-messages" aria-pressed="false">
-                更新を一時停止
-              </button>
-            </div>
-            <div id="messages"></div>
-          </section>
+            <span id="message-count" class="badge">0 件</span>
+          </div>
+          <div class="message-channel-bar">
+            <p id="message-channel">選択波を読み込み中</p>
+            <a href="#channels-title">チャンネルを選ぶ</a>
+          </div>
+          <div class="message-toolbar">
+            <span id="message-scope">選択波の最新 128 件まで</span
+            ><button id="pause-messages" aria-pressed="false">
+              更新を一時停止
+            </button>
+          </div>
+          <div id="messages"></div>
         </section>
       </div>
       <footer>

@@ -379,7 +379,73 @@ fieldset {
   grid-template-columns: minmax(0, 1.06fr) minmax(0, 1fr);
   align-items: start;
   gap: 24px;
+  margin-block-start: 16px;
+}
+.workspace-navigation,
+.workspace-navigation nav,
+.listening-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+.workspace-navigation {
+  justify-content: space-between;
   margin-block-start: 24px;
+}
+.workspace-navigation a,
+.message-channel-bar a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding-block: 8px;
+}
+.listening-control {
+  gap: 8px 12px;
+  font-size: var(--text-caption);
+}
+.workspace-tools {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: inherit;
+  align-items: start;
+  gap: 24px;
+}
+.panel-summary {
+  padding: 16px 22px;
+  border-radius: var(--radius);
+}
+.panel-summary h2 {
+  display: inline;
+  font-size: var(--text-body);
+}
+.panel-summary-meta {
+  display: block;
+  margin-block-start: 6px;
+  margin-inline-start: 1.25rem;
+  color: var(--muted);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.panel-disclosure[open] > .panel-summary {
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+  border-block-end: 1px solid var(--line);
+}
+.message-channel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 0 22px 12px;
+  font-size: var(--text-caption);
+}
+.message-channel-bar p {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .section-title {
   display: flex;
@@ -613,12 +679,6 @@ tr.selected {
   padding: 16px 22px;
   line-height: 1.8;
 }
-.detail {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  min-width: 0;
-}
 .frequency-heading {
   padding: 0 22px 22px;
 }
@@ -739,7 +799,7 @@ figcaption {
   padding: 0;
 }
 .monitor-selection {
-  padding: 0 22px 16px;
+  padding: 16px 22px;
 }
 #selection-hint {
   color: var(--muted);
@@ -1031,11 +1091,6 @@ body:has(#about-dialog[open]) {
   .workspace {
     grid-template-columns: minmax(0, 1fr);
   }
-  .detail {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
-  }
   .monitor-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1052,9 +1107,6 @@ body:has(#about-dialog[open]) {
   }
   main {
     padding-inline: 20px;
-  }
-  .detail {
-    display: flex;
   }
   .monitor-grid {
     grid-template-columns: minmax(0, 1fr) minmax(140px, 0.7fr);
@@ -1126,6 +1178,7 @@ body:has(#about-dialog[open]) {
   }
   .source-foot,
   .section-title,
+  .panel-summary,
   .table-note {
     padding: 16px;
   }
@@ -1146,6 +1199,7 @@ body:has(#about-dialog[open]) {
   .preset-feedback,
   .output-options,
   .monitor-selection,
+  .message-channel-bar,
   #recording-error {
     padding-inline: 16px;
   }
@@ -1261,5 +1315,120 @@ body:has(#about-dialog[open]) {
   }
   .badge {
     border: 1px solid CanvasText;
+  }
+}
+
+/* Keep the dated summary independent of the selected audio-channel panel. */
+.operation-monitor {
+  container-type: inline-size;
+}
+.operation-monitor .section-title {
+  flex-wrap: wrap;
+}
+.operation-monitor .badge {
+  white-space: normal;
+}
+.operation-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  padding: 0 22px;
+  font-variant-numeric: tabular-nums;
+}
+.operation-times dt {
+  color: var(--muted);
+  font-size: var(--text-caption);
+}
+.operation-times dd {
+  margin-block-start: 4px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.operation-note {
+  padding: 12px 22px 18px;
+  color: var(--muted);
+  font-size: var(--text-caption);
+}
+.operation-footnote {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 14px 22px;
+  color: var(--muted);
+  font-size: var(--text-caption);
+  overflow-wrap: anywhere;
+}
+.operation-table {
+  table-layout: fixed;
+}
+.operation-table :is(th, td) {
+  text-align: end;
+  padding: 10px 6px;
+  overflow-wrap: anywhere;
+}
+.operation-table th:first-child {
+  text-align: start;
+  padding-inline-start: 16px;
+  width: 17%;
+}
+.operation-table :is(th, td):last-child {
+  padding-inline-end: 16px;
+}
+.operation-table tbody th {
+  color: var(--text);
+  font-size: var(--text-caption);
+  font-weight: 600;
+  background: transparent;
+  border-block-start: 0;
+}
+.operation-cell-label {
+  display: none;
+}
+.operation-value {
+  font-variant-numeric: tabular-nums;
+}
+.operation-monitor .empty a {
+  display: inline-block;
+  margin-block-start: 12px;
+  padding-block: 8px;
+}
+@container (max-width: 38rem) {
+  .operation-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .operation-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 14px 16px;
+    border-block-start: 1px solid var(--line);
+  }
+  .operation-table tbody :is(th, td),
+  .operation-table tbody :is(th, td):first-child,
+  .operation-table tbody :is(th, td):last-child {
+    display: block;
+    width: auto;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    text-align: start;
+  }
+  .operation-table tbody td {
+    grid-column: auto;
+  }
+  .operation-table tbody th {
+    grid-column: 1 / -1;
+    font-size: var(--text-body);
+  }
+  .operation-cell-label {
+    display: block;
+    color: var(--muted);
+    font-size: 0.75rem;
+    margin-block-end: 2px;
   }
 }

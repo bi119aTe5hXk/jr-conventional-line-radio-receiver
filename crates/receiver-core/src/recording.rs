@@ -767,6 +767,56 @@ mod tests {
         }
     }
     #[test]
+    fn operation_summary_is_exported_with_nulls_and_original_bytes() {
+        let temp = Temp::new();
+        let configs = presets("east");
+        let common = configs
+            .iter()
+            .find(|c| c.format == crate::data::Format::Common)
+            .unwrap();
+        let mut writer = Writer::create(
+            &temp.0,
+            &configs,
+            OutputOptions {
+                audio: false,
+                raw_frames: false,
+                data_messages: true,
+            },
+        )
+        .unwrap();
+        let dir = writer.directory.clone();
+        let mut message = crate::data::synthetic_operation();
+        message.operation_summary.as_mut().unwrap().rows[0].on_line = None;
+        let expected = serde_json::to_value(&message).unwrap();
+        writer
+            .event(Event::Frame {
+                channel: common.id.clone(),
+                received_at: "2025-03-14T00:27:00Z".into(),
+                event: FrameEvent {
+                    epoch: 0,
+                    index: 0,
+                    frame: Frame {
+                        bit_offset: 0,
+                        sync_matched: true,
+                        marker_errors: 0,
+                        received: [0; 48],
+                    },
+                    corrected_bits: None,
+                    messages: vec![message],
+                },
+            })
+            .unwrap();
+        assert!(writer.finish(None).2.is_none());
+        let json: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(dir.join("data-messages.jsonl")).unwrap())
+                .unwrap();
+        assert_eq!(json["message"], expected);
+        assert!(json["message"]["operation_summary"]["rows"][0]["on_line"].is_null());
+        assert_eq!(json["received_at"], "2025-03-14T00:27:00Z");
+        assert!(json["message"]["timestamp"].is_null());
+    }
+
+    #[test]
     fn raw_rejected_envelopes_are_preserved_and_flush_errors_leave_incomplete() {
         let temp = Temp::new();
         let configs = presets("east")[..1].to_vec();

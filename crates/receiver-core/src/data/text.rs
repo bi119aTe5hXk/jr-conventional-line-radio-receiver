@@ -1,5 +1,5 @@
 use super::{Field, Result};
-fn jis(row: u8, cell: u8) -> Result<String> {
+pub(super) fn jis(row: u8, cell: u8) -> Result<String> {
     if row == 0x2d || (0x79..=0x7c).contains(&row) {
         return Err("Unsupported JIS extension");
     }

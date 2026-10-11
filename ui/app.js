@@ -1,6 +1,9 @@
 import { makeInput } from "./config.mjs";
 import { buildCatalog } from "./presets.mjs";
 import { AudioPlayer } from "./audio.mjs";
+import { OperationMonitorView } from "./operation-monitor.mjs";
+const operationMonitor = new OperationMonitorView(document);
+let sessionReplay = false;
 const $ = (id) => document.getElementById(id);
 const native = !!window.__TAURI__;
 const invoke = (command, args) => window.__TAURI__.core.invoke(command, args);
@@ -52,6 +55,7 @@ const rows = new Map(),
   messageNodes = new Map();
 const kinds = {
   ServiceInformation: "旅客一斉情報",
+  OperationSummary: "運行把握",
   MessageDirectory: "情報目録",
   Registration: "列車登録",
   Presence: "圏内識別",
@@ -63,6 +67,7 @@ const kinds = {
 };
 const fieldNames = {
   Line: "路線",
+  LineCount: "線区数",
   From: "発 / 区間始点",
   To: "着 / 区間終点",
   Direction: "方向",
@@ -123,6 +128,17 @@ $("about-open").addEventListener("click", () => {
 });
 $("about-close").addEventListener("click", () => $("about-dialog").close());
 $("about-dialog").addEventListener("close", () => $("about-open").focus());
+// Navigation into a disclosure must reveal its content before moving focus.
+document.addEventListener("click", (event) => {
+  const link = event.target.closest?.('a[href^="#"]');
+  if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey)
+    return;
+  const target = document.getElementById(link.hash.slice(1));
+  if (!target) return;
+  const panel = target.closest(".panel-disclosure");
+  if (panel) panel.open = true;
+  target.focus({ preventScroll: true });
+});
 function fail(error) {
   const text = `${error.message ?? error}\n設定と接続を確認し、受信を再開してください。`;
   if ($("error").textContent !== text) $("error").textContent = text;
@@ -306,10 +322,11 @@ function setControls() {
   renderSelectionMode();
   renderChannelStates();
   $("channel-count").textContent =
-    `${enabled.size} 波を選択 · ${running ? "同時処理中" : "待機"}`;
+    `${presetCatalog.find((p) => p.id === activePresetId)?.label ?? "プリセット未読込"} · ${enabled.size} 波を選択 · ${running ? "同時処理中" : "待機"}`;
   $("all").checked = enabled.size === channels.length;
   $("all").indeterminate = enabled.size > 0 && enabled.size < channels.length;
   renderRecording();
+  operationMonitor.update(lastSnapshot, { channels, enabled, running, replay: sessionReplay });
 }
 function renderSelectionMode() {
   const automatic = $("auto-select").checked;
@@ -642,6 +659,11 @@ function select(id, manual = false) {
   $("selected-label").textContent = c
     ? c.label + (note ? ` · ${note}` : "")
     : "プリセットを読み込んでください";
+  const summary = c
+    ? `${(c.frequency_hz / 1e6).toFixed(5)} MHz · ${c.label}`
+    : "プリセットを読み込んでください";
+  $("monitor-summary").textContent = summary;
+  $("message-channel").textContent = summary;
   detail(null);
   if (lastSnapshot) {
     const row = lastSnapshot.channels.find((c) => c.config.id === id);
@@ -897,6 +919,7 @@ function showPresetError(error) {
   $("preset-error").textContent =
     `プリセットを読み込めませんでした。${error.message ?? error} ${channels.length ? "現在のプリセットを引き続き使用します。" : "読み込むまで受信を開始できません。"} ファイルを確認して選び直してください。${presetFile ? "再読み込み、組み込みへの切替もできます。" : ""}`;
   $("preset-error").hidden = false;
+  $("channels-panel").open = true;
   $("preset-settings").open = true;
 }
 function installCatalog(catalog, preferred) {
@@ -1058,6 +1081,7 @@ $("start").addEventListener("click", async () => {
       config: { input, channels: activeChannels },
     });
     running = true;
+    sessionReplay = input.kind === "wave";
     recordingStatus = emptyRecording();
     recordingResumePending = recordingEnabled;
     clearRecordingError();
@@ -1074,6 +1098,8 @@ $("start").addEventListener("click", async () => {
     if (e.field) {
       invalidField = $(e.field);
       $("source-panel").open = true;
+      const panel = invalidField.closest(".panel-disclosure");
+      if (panel) panel.open = true;
       if (e.field === "args") $("soapy-options").open = true;
       invalidField.setAttribute("aria-invalid", "true");
       invalidField.setAttribute("aria-describedby", "field-error");
@@ -1141,6 +1167,7 @@ $("selected-format").addEventListener("change", () => {
   channel.format = $("selected-format").value;
   rows.get(selected).format.textContent =
     channel.format === "common" ? "一斉" : "通常";
+  setControls();
 });
 function updatePause() {
   $("pause-messages").textContent = messagesPaused

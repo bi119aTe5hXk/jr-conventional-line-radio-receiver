@@ -1,11 +1,15 @@
 //! Verified data frames and bounded application messages. Unknown codes stay raw.
 mod lha;
+mod operation;
 mod packet;
 mod text;
 use crate::{
     coding::{crc16, descramble, Galois},
     frame::Frame,
 };
+#[cfg(test)]
+pub(crate) use operation::tests::decoded as synthetic_operation;
+pub use operation::{OperationReception, OperationRow, OperationSummary};
 use packet::{Assembler, Packet};
 use serde::{Deserialize, Serialize};
 type Result<T> = std::result::Result<T, &'static str>;
@@ -40,6 +44,8 @@ pub struct Message {
     pub raw_hex: String,
     pub first_bit: u64,
     pub last_bit: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation_summary: Option<OperationSummary>,
 }
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct Stats {
@@ -56,6 +62,7 @@ pub struct Decoder {
     part: u8,
     first: u64,
     last: u64,
+    operation: operation::Assembler,
     pub stats: Stats,
 }
 pub fn decode_frame(envelope: &[u8; 48]) -> Option<([u8; 28], usize)> {
@@ -76,6 +83,7 @@ impl Decoder {
             part: 0,
             first: 0,
             last: 0,
+            operation: operation::Assembler::default(),
             stats: Stats::default(),
         }
     }
@@ -84,6 +92,7 @@ impl Decoder {
         self.key = None;
         self.part = 0;
         self.body.clear();
+        self.operation = operation::Assembler::default();
     }
     pub fn decode(&mut self, frame: &Frame) -> Vec<Message> {
         let Some((info, corrected)) = decode_frame(&frame.received) else {
@@ -120,6 +129,9 @@ impl Decoder {
         }
     }
     fn common(&mut self, p: Packet) -> Result<Option<Message>> {
+        if p.bytes.first() == Some(&0x22) {
+            return self.operation.accept(p);
+        }
         let b = &p.bytes;
         if b.len() < 16 || b[0] != 0x21 {
             return Ok(Some(unknown(p)));
@@ -127,12 +139,15 @@ impl Decoder {
         if b[2] == 4 {
             if b.len() < 21
                 || !(b.len() - 21).is_multiple_of(2)
+                || usize::from(b[18]) != (b.len() - 21) / 2
                 || sum(&b[13..b.len() - 2]) != be(&b[b.len() - 2..])
             {
                 return Err("Invalid message directory");
             }
             let mut m = message("MessageDirectory", "directory", &p);
-            m.timestamp = Some(stamp(&b[13..19])?);
+            // Five BCD components (YY MM DD hh mm), followed by a binary
+            // message-ID count. The count is not a seconds component.
+            m.timestamp = Some(stamp(&b[13..18])?);
             add(&mut m.fields, "MessageIds", pairs(&b[19..b.len() - 2]));
             return Ok(Some(m));
         }
@@ -202,6 +217,7 @@ impl Decoder {
             raw_hex: hex(&content),
             first_bit: self.first,
             last_bit: p.last,
+            operation_summary: None,
         }))
     }
 }
@@ -274,6 +290,7 @@ fn message(kind: &str, id: impl ToString, p: &Packet) -> Message {
         raw_hex: hex(&p.bytes),
         first_bit: p.first,
         last_bit: p.last,
+        operation_summary: None,
     }
 }
 fn unknown(p: Packet) -> Message {
@@ -396,6 +413,7 @@ fn call(info: &[u8; 28], offset: u64) -> Message {
         raw_hex: hex(info),
         first_bit: offset,
         last_bit: offset,
+        operation_summary: None,
     }
 }
 fn channels(info: &[u8; 28], offset: u64) -> Vec<Message> {
@@ -429,7 +447,67 @@ fn channels(info: &[u8; 28], offset: u64) -> Vec<Message> {
                 raw_hex: hex(r),
                 first_bit: offset,
                 last_bit: offset,
+                operation_summary: None,
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn directory(count: u8) -> Packet {
+        let mut bytes = vec![0; 13];
+        bytes[0] = 0x21;
+        bytes[2] = 4;
+        // Synthetic minute-resolution date and IDs; no captured data.
+        bytes.extend([0x25, 0x03, 0x14, 0x09, 0x26, count]);
+        for id in 0..u16::from(count) {
+            bytes.extend((0xa000 + id).to_be_bytes());
+        }
+        bytes.extend(sum(&bytes[13..]).to_be_bytes());
+        bytes[1] = (bytes.len() - 2) as u8;
+        Packet {
+            bytes,
+            first: 384,
+            last: 768,
+        }
+    }
+
+    #[test]
+    fn directory_count_is_not_a_seconds_component() {
+        let mut decoder = Decoder::new(Format::Common);
+        // Decimal-looking counts previously invented seconds; 0x0D/0x0F
+        // previously rejected otherwise valid directories as invalid BCD.
+        for count in [0, 1, 9, 13, 15, 16, 118] {
+            let packet = directory(count);
+            let raw = hex(&packet.bytes);
+            let m = decoder.common(packet).unwrap().unwrap();
+            assert_eq!(m.kind, "MessageDirectory");
+            assert_eq!(m.timestamp.as_deref(), Some("2025-03-14T09:26:00"));
+            assert_eq!(m.raw_hex, raw);
+            let ids = m.fields.iter().find(|f| f.field == "MessageIds").unwrap();
+            assert_eq!(ids.value.split_whitespace().count(), usize::from(count));
+            if count != 0 {
+                assert_eq!(ids.value.split_whitespace().next(), Some("A000"));
+            }
+        }
+    }
+
+    #[test]
+    fn directory_rejects_inconsistent_counts_invalid_dates_and_corruption() {
+        let mut decoder = Decoder::new(Format::Common);
+        for (offset, value) in [(18, 12), (14, 0x13), (17, 0x6a)] {
+            let mut packet = directory(13);
+            packet.bytes[offset] = value;
+            let end = packet.bytes.len() - 2;
+            let checksum = sum(&packet.bytes[13..end]).to_be_bytes();
+            packet.bytes[end..].copy_from_slice(&checksum);
+            assert!(decoder.common(packet).is_err());
+        }
+        let mut packet = directory(13);
+        packet.bytes[19] ^= 1;
+        assert!(decoder.common(packet).is_err());
+    }
 }

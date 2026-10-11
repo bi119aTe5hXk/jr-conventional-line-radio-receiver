@@ -1,5 +1,5 @@
 use crate::{
-    data::{Decoder, Format, Message, Stats},
+    data::{Decoder, Format, Message, OperationReception, Stats},
     frame::{Frame, Synchronizer},
     voice_frame, Complex32,
 };
@@ -45,6 +45,7 @@ pub struct Status {
     pub data: Stats,
     pub constellation: Vec<[f32; 2]>,
     pub messages: Vec<Received>,
+    pub operation_monitor: Option<OperationReception>,
     pub epoch: u64,
 }
 pub struct FrameEvent {
@@ -189,6 +190,14 @@ impl Pipeline {
         self.voice.push(index, speech.map(|s| s.payload))?;
         let messages = self.data.decode(frame);
         for message in messages.iter().cloned() {
+            if message.operation_summary.is_some() {
+                OperationReception::update(
+                    &mut self.status.operation_monitor,
+                    &message,
+                    chrono::DateTime::<chrono::Utc>::from(std::time::SystemTime::now())
+                        .to_rfc3339(),
+                );
+            }
             if self.events.len() == 128 {
                 self.events.pop_front();
             }

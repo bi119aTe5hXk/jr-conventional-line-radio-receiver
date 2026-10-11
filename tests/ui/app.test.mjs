@@ -6,6 +6,7 @@ import { JSDOM } from "jsdom";
 import { makeInput } from "../../ui/config.mjs";
 import { buildCatalog } from "../../ui/presets.mjs";
 import { AudioPlayer } from "../../ui/audio.mjs";
+import { OperationMonitorView } from "../../ui/operation-monitor.mjs";
 const html = await readFile(
   new URL("../../ui/index.html", import.meta.url),
   "utf8",
@@ -126,7 +127,7 @@ async function setup(
   let snapshot = { status: status(), audio: [] };
   let recording = { state: "idle", files: 0, pcm_samples: 0, error: null };
   let closeHandler;
-  w.testDependencies = { makeInput, buildCatalog, AudioPlayer };
+  w.testDependencies = { makeInput, buildCatalog, AudioPlayer, OperationMonitorView };
   w.structuredClone = structuredClone;
   // jsdom has no native modal behavior. Exercise our handlers, not a focus trap
   // or Escape key implementation; those belong to the browser's dialog element.
@@ -251,7 +252,7 @@ async function setup(
     };
   };
   await w.eval(
-    `(async () => {const { makeInput, buildCatalog, AudioPlayer } = window.testDependencies;\n${source}\n})()`,
+    `(async () => {const { makeInput, buildCatalog, AudioPlayer, OperationMonitorView } = window.testDependencies;\n${source}\n})()`,
   );
   const $ = (id) => w.document.getElementById(id);
   if (!catalogError)
@@ -681,6 +682,7 @@ test("missing saved catalogs block reception and can recover without losing save
   assert.equal(ui.$("region").disabled, true);
   assert.equal(ui.$("channels-simple").children.length, 0);
   assert.equal(ui.$("preset-error").hidden, false);
+  assert.equal(ui.$("channels-panel").open, true);
   assert.equal(ui.$("preset-path").textContent, path);
   await ui.click("start");
   assert.equal(
@@ -742,6 +744,8 @@ test("loading locks receiving controls and a removed saved profile selects and p
 });
 test("automatic selection plays the returned channel while a manual choice pins both views", async (t) => {
   const ui = await setup(t);
+  assert.equal(ui.$("channels-panel").open, false);
+  assert.equal(ui.$("monitor-panel").open, false);
   assert.equal(ui.$("auto-select").checked, true);
   ui.$("listen").checked = true;
   await ui.click("start");
@@ -761,6 +765,9 @@ test("automatic selection plays the returned channel while a manual choice pins 
   });
   await ui.poll();
   assert.equal(ui.$("selected-frequency").textContent, "352.54375");
+  assert.match(ui.$("monitor-summary").textContent, /352\.54375 MHz/);
+  assert.equal(ui.$("message-channel").textContent, ui.$("monitor-summary").textContent);
+  assert.equal(ui.$("monitor-panel").open, false);
   assert.deepEqual(ui.playback, [8000 / 32768]);
   assert.equal(
     ui.$("channels-simple").children[1].querySelector(".compact-state")
@@ -1445,6 +1452,12 @@ test("invalid fields expose an error and regain focus without starting", async (
   assert.equal(ui.w.document.activeElement.id, "port");
   assert.equal(ui.$("field-error").hidden, false);
   ui.input("port", "1234");
+  await ui.click("all");
+  await ui.click("start");
+  assert.equal(ui.$("channels-panel").open, true);
+  assert.equal(ui.w.document.activeElement.id, "all");
+  assert.equal(ui.$("all").getAttribute("aria-invalid"), "true");
+  await ui.click("all");
   await ui.click("start");
   assert.equal(ui.$("port").hasAttribute("aria-invalid"), false);
   assert.equal(ui.$("error").hidden, true);
@@ -1493,4 +1506,110 @@ test("a snapshot requested before channel selection cannot overwrite the new det
   await pending;
   assert.equal(ui.$("selected-frequency").textContent, "352.54375");
   assert.doesNotMatch(ui.$("messages").textContent, /old-channel/);
+});
+
+function operationStatus({ receptions = 1, received = "2025-03-14T00:27:00Z", unknown = false } = {}) {
+  const s = status();
+  const common = s.channels.find((c) => c.config.format === "common");
+  common.status.operation_monitor = {
+    last_received_at: received, receptions,
+    summary: {
+      rows: [{ line: "試験Ａ", delayed: 3, on_line: unknown ? null : 40,
+        delay_classes: [2, 1, 0], max_delay_min: 7, train_no: unknown ? null : "12C" }],
+    },
+  };
+  return s;
+}
+test("operation monitor updates independently of manual audio selection and log pause", async (t) => {
+  const app = await setup(t);
+  await app.click("start");
+  const selected = app.$("selected-frequency").textContent;
+  app.$("auto-select").checked = false;
+  await app.click("pause-messages");
+  app.setSnapshot({ status: operationStatus(), audio: [] });
+  await app.poll();
+  assert.equal(app.$("operation-content").hidden, false);
+  assert.match(app.$("operation-rows").textContent, /試験Ａ/);
+  assert.match(app.$("operation-rows").textContent, /3 \/ 40/);
+  assert.equal(app.$("operation-message-time"), null);
+  assert.match(app.$("operation-received-time").textContent, /2025\/03\/14 09:27:00/);
+  assert.equal(app.$("selected-frequency").textContent, selected);
+  assert.equal(app.$("auto-select").checked, false);
+  assert.equal(app.$("pause-messages").getAttribute("aria-pressed"), "true");
+  assert.equal(app.$("operation-state").textContent, "受信済み");
+  const row = app.$("operation-rows").firstElementChild;
+  app.setSnapshot({ status: operationStatus({ receptions: 2, received: "2025-03-14T00:32:00Z" }), audio: [] });
+  await app.poll();
+  assert.equal(app.$("operation-rows").firstElementChild, row);
+  assert.match(app.$("operation-repetitions").textContent, /2 回/);
+  assert.match(app.$("operation-received-time").textContent, /09:32:00/);
+  assert.equal(app.$("operation-state").textContent, "受信済み");
+  // Reveal the controls without disturbing the paused log or audio selection.
+  app.w.document.querySelector('.message-channel-bar a').click();
+  assert.equal(app.$("channels-panel").open, true);
+  assert.equal(app.w.document.activeElement, app.$("channels-title"));
+  app.w.document.querySelector('.filter-note a').click();
+  assert.equal(app.$("monitor-panel").open, true);
+  assert.equal(app.w.document.activeElement, app.$("monitor-title"));
+  await app.click("channels-title");
+  await app.click("monitor-title");
+  assert.equal(app.$("channels-panel").open, false);
+  assert.equal(app.$("monitor-panel").open, false);
+  assert.equal(app.$("auto-select").checked, false);
+  assert.equal(app.$("selected-frequency").textContent, selected);
+  assert.equal(app.$("pause-messages").getAttribute("aria-pressed"), "true");
+  assert.equal(app.$("operation-rows").firstElementChild, row);
+});
+test("operation monitor distinguishes missing values and resets on a new receive session or profile", async (t) => {
+  const app = await setup(t);
+  await app.click("start");
+  app.setSnapshot({ status: operationStatus({ unknown: true }), audio: [] });
+  await app.poll();
+  assert.equal(app.$("operation-state").textContent, "受信済み");
+  assert.match(app.$("operation-rows").textContent, /3 \/ 不明/);
+  const cells = app.$("operation-rows").querySelectorAll(".operation-value");
+  assert.equal(cells[3].textContent, "0");
+  assert.equal(cells[5].textContent, "不明");
+  await app.click("stop");
+  assert.match(app.$("operation-state").textContent, /受信停止/);
+  await app.click("start");
+  assert.equal(app.$("operation-content").hidden, true);
+  assert.equal(app.$("operation-rows").children.length, 0);
+  app.setSnapshot({ status: operationStatus(), audio: [] });
+  await app.poll();
+  await app.click("stop");
+  await app.change("region", "central");
+  assert.equal(app.$("operation-content").hidden, true);
+  assert.match(app.$("operation-empty-title").textContent, /共用波が受信対象にありません/);
+});
+test("operation monitor selects by reception time and ignores legacy message dates", async (t) => {
+  const app = await setup(t);
+  await app.click("start");
+  const s = operationStatus();
+  const first = s.channels.find((c) => c.status.operation_monitor);
+  first.status.operation_monitor.message_time = "2099-12-31T23:59:59";
+  const second = structuredClone(first);
+  second.config.id = "second-common";
+  second.config.label = "試験共用波Ｂ";
+  second.status.operation_monitor.message_time = "2000-01-01T00:00:00";
+  second.status.operation_monitor.last_received_at = "2025-03-14T00:28:00Z";
+  second.status.operation_monitor.summary.rows[0].line = "試験Ｂ";
+  s.channels.push(second);
+  app.setSnapshot({ status: s, audio: [] });
+  await app.poll();
+  assert.match(app.$("operation-source").textContent, /試験共用波Ｂ/);
+  assert.match(app.$("operation-rows").textContent, /試験Ｂ/);
+  assert.match(app.$("operation-received-time").textContent, /09:28:00/);
+  assert.equal(app.$("operation-state").textContent, "受信済み");
+  assert.equal(app.$("operation-message-time"), null);
+  assert.doesNotMatch(app.$("operation-content").textContent, /2099|2000|電文日時/);
+  const row = app.$("operation-rows").firstElementChild;
+  second.status.operation_monitor.message_time = "invalid legacy date";
+  await app.poll();
+  assert.equal(app.$("operation-rows").firstElementChild, row);
+  assert.equal(app.$("operation-state").textContent, "受信済み");
+  const view = new OperationMonitorView(app.w.document);
+  view.update(s, { channels: s.channels.map((c) => c.config), enabled: new Set(), running: true, replay: true });
+  assert.equal(app.$("operation-received-label").textContent, "最終読取日時");
+  assert.equal(app.$("operation-state").textContent, "IQ再生 · 受信済み");
 });
