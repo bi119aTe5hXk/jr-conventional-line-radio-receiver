@@ -8,7 +8,6 @@ Author: KIRISHIKI Yudai <yudai.kirishiki@protonmail.com>
 
 JR 在来線デジタル列車無線を受信する、Rust + Tauri 2 + SoapySDR のデスクトップアプリです。
 一つの広帯域 IQ ストリームから **22 波を同時に復調し、各波の音声とデータを独立して復号**します。
-SDR# や .NET、外付け音声デコーダーは実行時に必要ありません。
 製品名・バージョン・Author は、画面下部の「バージョン情報」で確認できます。
 
 ## 起動

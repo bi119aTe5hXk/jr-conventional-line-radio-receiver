@@ -8,7 +8,6 @@ Author: KIRISHIKI Yudai <yudai.kirishiki@protonmail.com>
 
 A desktop receiver for digital train radio on JR conventional railway lines, built with Rust, Tauri 2, and SoapySDR.
 It **demodulates 22 channels simultaneously from one wideband IQ stream and decodes each channel's voice and data independently**.
-SDR#, .NET, and an external voice decoder are not required at runtime.
 The interface is currently in Japanese; this guide includes the on-screen labels alongside their English meanings.
 The product name, version, and author appear in “バージョン情報” (About) at the bottom of the window.
 
