@@ -37,6 +37,7 @@ pub struct Sequence {
     write: usize,
     filled: usize,
     previous: Option<usize>,
+    equalized: Option<Complex32>,
 }
 
 impl Default for Sequence {
@@ -50,11 +51,19 @@ impl Default for Sequence {
             write: 0,
             filled: 0,
             previous: None,
+            equalized: None,
         }
     }
 }
 
 impl Sequence {
+    /// Current observation after survivor-channel ISI and complex-gain removal.
+    /// This passive, unsliced estimate uses the same pre-update channel as the
+    /// branch metric; it must not feed decisions or adaptation back into the DSP.
+    pub fn equalized(&self) -> Option<Complex32> {
+        self.equalized
+    }
+
     pub fn process(&mut self, input: Complex32, reliable: bool) -> (Option<u8>, f32, f32) {
         let mut costs = [f32::INFINITY; STATES];
         let mut parents = [0; STATES];
@@ -101,6 +110,32 @@ impl Sequence {
         let phase = (input.imaginary * best_prediction.real
             - input.real * best_prediction.imaginary)
             .atan2(input.real * best_prediction.real + input.imaginary * best_prediction.imaginary);
+        // The detector emits hard dibits after traceback, not a filtered IQ
+        // stream. For diagnostics, cancel the delayed paths of the current best
+        // survivor from the received observation and divide by its main tap.
+        // Do this BEFORE adaptation so the current noise/error is not fitted away.
+        let prior = parents[best] as usize;
+        let channel = &self.channels[prior];
+        let main = channel[0];
+        let power = main.real * main.real + main.imaginary * main.imaginary;
+        self.equalized = if reliable && power.is_finite() && power > 1e-6 {
+            let mut value = input;
+            for (h, s) in channel[1..].iter().zip([
+                SYMBOLS[prior % 4],
+                SYMBOLS[(prior / 4) % 4],
+                SYMBOLS[prior / 16],
+            ]) {
+                value.real -= h.real * s.real - h.imaginary * s.imaginary;
+                value.imaginary -= h.real * s.imaginary + h.imaginary * s.real;
+            }
+            let value = Complex32 {
+                real: (value.real * main.real + value.imaginary * main.imaginary) / power,
+                imaginary: (value.imaginary * main.real - value.real * main.imaginary) / power,
+            };
+            (value.real.is_finite() && value.imaginary.is_finite()).then_some(value)
+        } else {
+            None
+        };
         let mut channels = self.channels;
         for state in 0..STATES {
             let prior = parents[state] as usize;
@@ -179,6 +214,76 @@ mod tests {
                 (state >> 30) as usize
             })
             .collect()
+    }
+
+    #[test]
+    fn diagnostic_cancels_all_delayed_paths_and_complex_gain_without_slicing() {
+        let mut detector = Sequence::default();
+        let prior = 2 + 4 + 16 * 3;
+        detector.costs.fill(f32::INFINITY);
+        detector.costs[prior] = 0.0;
+        let channel = [
+            Complex32 {
+                real: 0.6,
+                imaginary: 0.3,
+            },
+            Complex32 {
+                real: 0.4,
+                imaginary: -0.2,
+            },
+            Complex32 {
+                real: -0.2,
+                imaginary: 0.15,
+            },
+            Complex32 {
+                real: 0.1,
+                imaginary: 0.05,
+            },
+        ];
+        detector.channels[prior] = channel;
+        // A noisy observation must remain noisy after channel correction.
+        let expected = Complex32 {
+            real: SYMBOLS[1].real + 0.12,
+            imaginary: SYMBOLS[1].imaginary - 0.07,
+        };
+        let mut received = Complex32::default();
+        for (h, s) in channel
+            .iter()
+            .zip([expected, SYMBOLS[2], SYMBOLS[1], SYMBOLS[3]])
+        {
+            received.real += h.real * s.real - h.imaginary * s.imaginary;
+            received.imaginary += h.real * s.imaginary + h.imaginary * s.real;
+        }
+        assert!(detector.equalized().is_none());
+        let (dibit, _, _) = detector.process(received, true);
+        assert!(
+            dibit.is_none(),
+            "diagnostics do not wait for hard traceback"
+        );
+        let actual = detector.equalized().unwrap();
+        assert!((actual.real - expected.real).abs() < 1e-6, "{actual:?}");
+        assert!(
+            (actual.imaginary - expected.imaginary).abs() < 1e-6,
+            "{actual:?}"
+        );
+
+        detector.process(received, false);
+        assert!(
+            detector.equalized().is_none(),
+            "a fade must clear the observation"
+        );
+    }
+
+    #[test]
+    fn diagnostic_does_not_invert_an_unusable_main_tap() {
+        for gain in [0.0, 1e-4] {
+            let mut detector = Sequence::default();
+            for channel in &mut detector.channels {
+                channel[0].real = gain;
+            }
+            detector.process(SYMBOLS[0], true);
+            assert!(detector.equalized().is_none());
+        }
     }
 
     #[test]

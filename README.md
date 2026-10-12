@@ -66,6 +66,10 @@ Use “再読み込み” (Reload) to apply edits, or “組み込みに戻す�
    “保存を開始” (Start saving) saves output from every active receive channel. WAV is the only format enabled by default.
    Status and start/stop controls remain visible when the settings are collapsed.
 
+The constellation and EVM use the signal after receive filtering, timing recovery, carrier correction, and inter-symbol interference correction.
+The last correction uses the sequence detector's current best channel estimate. The display preserves received amplitude and phase scatter instead of plotting decoded ideal symbols.
+EVM is an uncalibrated tuning aid, not an SNR or error-rate measurement.
+
 The frequencies span 352.53750–352.66875 MHz at 6.25 kHz intervals.
 This is a 131.25 kHz span. Including the demodulation filter margin, receiving all channels requires a complex sample rate greater than 139.65 kS/s.
 Allow additional margin for the hardware's usable bandwidth and anti-aliasing characteristics.

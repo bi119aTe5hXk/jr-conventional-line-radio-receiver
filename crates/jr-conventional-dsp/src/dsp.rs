@@ -375,8 +375,11 @@ impl SymbolChain {
         })?;
         let (symbol, timing_error) = self.equalizer.process(&matched, &derivatives, reliable);
         self.clock.update(timing_error);
-        self.signal.push(symbol);
-        let dibit = self.carrier.process(symbol, reliable)?;
+        let dibit = self.carrier.process(symbol, reliable);
+        // Observe only after all waveform, timing, carrier and survivor-channel
+        // corrections. Keep the received scatter rather than plotting dibits.
+        self.signal.push(self.carrier.sequence.equalized());
+        let dibit = dibit?;
         self.symbols += 1;
         if self.carrier.locked {
             self.locked_symbols += 1;
@@ -478,5 +481,65 @@ impl Demodulator {
             carrier_locked: i32::from(self.symbols.carrier.locked),
             reserved: 0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn constellation_tracks_filtered_carrier_and_isi_corrected_iq() {
+        // Synthetic pi/4-DQPSK at four samples/symbol: pulse shaping, a delayed
+        // reflection, a carrier offset and deterministic noise. No recordings.
+        let taps = root_raised_cosine(81, 4.0, 4.0);
+        let mut shaped = vec![Complex32::default(); 6000 * 4 + taps.len()];
+        let mut rng = 0x8123_4567_u32;
+        for i in 0..6000 {
+            rng ^= rng << 13;
+            rng ^= rng >> 17;
+            rng ^= rng << 5;
+            let angle = (rng >> 30) as f64 * PI / 2.0 + PI / 4.0 + i as f64 * PI / 4.0;
+            for (j, &tap) in taps.iter().enumerate() {
+                shaped[i * 4 + j].real += angle.cos() as f32 * tap;
+                shaped[i * 4 + j].imaginary += angle.sin() as f32 * tap;
+            }
+        }
+        let input: Vec<_> = shaped
+            .iter()
+            .enumerate()
+            .map(|(i, &direct)| {
+                let echo = shaped[i.saturating_sub(4)];
+                let real = direct.real + 0.45 * echo.real;
+                let imaginary = direct.imaginary + 0.45 * echo.imaginary;
+                let phase = 2.0 * PI * 90.0 * i as f64 / 19200.0;
+                // Two independent, repeatable bounded noise components.
+                rng ^= rng << 13;
+                rng ^= rng >> 17;
+                rng ^= rng << 5;
+                Complex32 {
+                    real: real * phase.cos() as f32 - imaginary * phase.sin() as f32
+                        + 0.03 * ((rng & 0xffff) as f32 / 32768.0 - 1.0),
+                    imaginary: real * phase.sin() as f32
+                        + imaginary * phase.cos() as f32
+                        + 0.03 * ((rng >> 16) as f32 / 32768.0 - 1.0),
+                }
+            })
+            .collect();
+        let mut receiver = Demodulator::new(19200.0, 0.0, 0);
+        let mut output = [0; 1024];
+        let mut points = [Complex32::default(); 256];
+        for chunk in input.chunks(509) {
+            receiver.process(chunk, &mut output);
+        }
+        let (count, evm) = receiver.read_signal(&mut points);
+        assert_eq!(count, points.len());
+        assert!(receiver.snapshot().carrier_locked != 0);
+        assert!(evm > 1.0 && evm < 20.0, "post-correction EVM: {evm}%");
+        // Hard-decided corners or per-point amplitude normalization would hide
+        // the scatter that operators use to assess reception quality.
+        assert!(points
+            .iter()
+            .any(|p| (p.real * p.real + p.imaginary * p.imaginary - 1.0).abs() > 0.02));
     }
 }

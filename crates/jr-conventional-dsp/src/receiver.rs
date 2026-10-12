@@ -24,6 +24,8 @@ impl Dsp {
         bits.truncate(count);
         Ok(self.0.snapshot())
     }
+    /// Differential constellation and EVM after receive filtering, timing,
+    /// carrier and survivor-channel correction; preserves received scatter.
     pub fn signal(&self) -> (Vec<[f32; 2]>, f64) {
         let mut symbols = [Complex32::default(); 256];
         let (count, evm) = self.0.read_signal(&mut symbols);
