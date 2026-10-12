@@ -245,7 +245,7 @@ Source overflow or queue loss invalidates continuity for the affected stream and
 IQ queues hold eight blocks per channel. The TCP input queue holds 32 blocks to absorb bursts, or up to 1.28 seconds at 240 kS/s.
 TCP header reads time out after three seconds; five seconds without stream data is an error. Disconnects are distinguished from normal completion.
 UI snapshots update roughly every 180 ms. Data history is limited to 128 messages per channel, and the audio monitor queue to five seconds.
-Live playback starts with a 440 ms jitter buffer and schedules subsequent PCM frames continuously on the audio clock, before rendering UI details. Small arrival delays do not cancel playing audio. A gradual playback-rate adjustment (at most ±0.5%) compensates for receiver/output clock drift; the scheduled playback queue is capped at 1.5 seconds to accommodate batched input and poll jitter. These adjustments affect monitoring only, not recorded WAV samples.
+Live playback starts with a 440 ms jitter buffer and schedules subsequent PCM frames continuously on the audio clock, before rendering UI details. Small arrival delays do not cancel playing audio. A continuous linear resampler retains the previous sample and fractional input position across 40 ms PCM frames, including gradual clock-drift correction (at most ±0.5%). Web Audio receives buffers at the output device's sample rate, scheduled at integral sample boundaries with each source's playback rate fixed at 1. This avoids interpolation restarts and fractional-boundary artifacts between frames. The scheduled playback queue is capped at 1.5 seconds to accommodate batched input and poll jitter. These adjustments affect monitoring only, not recorded WAV samples.
 Stopping joins input and processing threads. Restarting creates fresh state.
 
 ```sh
@@ -257,3 +257,5 @@ npm ci
 npm test  # Input validation and DOM state transitions, not rendered UI tests.
 node scripts/check-contrast.mjs
 ```
+
+For actual playback-waveform regression testing on Linux, run `/usr/bin/python3 scripts/check-audio-webkit.py` with `python3-gi`, `gir1.2-webkit2-4.1`, and a display available (or use `xvfb-run`). It renders synthetic constant and sine-wave PCM through WebKitGTK at 44.1, 48, and 96 kHz, checks frame-boundary continuity under clock correction, and exits nonzero on failure. It does not play sound or use recordings. The same [test page](tests/audio/playback-render.html) can be served locally for testing other browsers.

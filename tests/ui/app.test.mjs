@@ -98,6 +98,7 @@ async function setup(
       audioContext = this;
     }
     state = "running";
+    sampleRate = 48000;
     currentTime = 0;
     destination = {};
     async resume() {}
