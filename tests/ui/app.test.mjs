@@ -70,6 +70,7 @@ async function setup(
   t,
   {
     native = true,
+    webRuntime = false,
     configureConnection = true,
     catalogError = null,
     recordingError = null,
@@ -193,6 +194,7 @@ async function setup(
             if (command === "snapshot") {
               const result =
                 typeof snapshot === "function" ? await snapshot() : snapshot;
+              if (result === null) return null;
               return {
                 ...result,
                 status: {
@@ -241,6 +243,7 @@ async function setup(
         },
       }
     : undefined;
+  w.__JR_RECEIVER_WEB__ = webRuntime;
   w.fetch = async (url) => {
     assert.equal(url, "radio-presets.json");
     return {
@@ -1099,6 +1102,43 @@ test("browser preview loads the same structured configuration and can switch pro
   await ui.click("about-open");
   assert.equal(ui.$("about-dialog").open, true);
   assert.equal(ui.calls.length, 0);
+});
+
+test("web browsers attach to a running server session with independent audio cursors", async (t) => {
+  const ui = await setup(t, { webRuntime: true });
+  const first = ui.calls.find((call) => call.command === "snapshot");
+  assert.ok(first, "the web page polls before starting its own session");
+  assert.equal(first.args.audio_after, null);
+  assert.equal(first.args.audio_generation, null);
+  assert.equal(ui.$("state").textContent, "受信中");
+
+  ui.setSnapshot({
+    status: status(),
+    audio_generation: 7,
+    audio: [
+      {
+        channel: presets[0].id,
+        epoch: 3,
+        index: 12,
+        pcm: [0],
+      },
+    ],
+  });
+  await ui.poll();
+  await ui.poll();
+  const latest = ui.calls.filter((call) => call.command === "snapshot").at(-1);
+  assert.equal(latest.args.audio_generation, 7);
+  assert.deepEqual(JSON.parse(JSON.stringify(latest.args.audio_after)), {
+    channel: presets[0].id,
+    epoch: 3,
+    index: 12,
+  });
+
+  ui.setSnapshot(null);
+  await ui.poll();
+  assert.equal(ui.$("state").textContent, "停止中");
+  assert.equal(ui.$("start").disabled, false);
+  assert.equal(ui.$("stop").disabled, true);
 });
 
 test("simple and detailed views share selection, receive targets, filtering and live state", async (t) => {

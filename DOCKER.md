@@ -1,6 +1,6 @@
 # Docker and CasaOS
 
-This container accesses a USB SDR directly on a Debian host and serves the receiver UI on port `8080` for desktop and mobile browsers. The web backend reuses the desktop application's `receiver-core` and SoapySDR input. It runs one receiver session at a time; for this initial version, use only one browser tab for audio playback.
+This container accesses a USB SDR directly on a Debian host and serves the receiver UI on port `8080` for desktop and mobile browsers. The web backend reuses the desktop application's `receiver-core` and SoapySDR input. It runs one shared receiver session at a time. Every connected browser sees the same receiver and recording state, while each browser can choose its own monitored channel and audio volume.
 
 ## Start the container
 
@@ -66,5 +66,5 @@ If `--find` cannot see the device, resolve the USB, API, or SoapySDR module prob
 ## Current web-version limitations
 
 - A browser cannot display the container's native file picker. IQ WAV and external preset paths must currently be entered as paths inside the container.
-- Status and decoded audio use HTTP polling at approximately 180 ms. Multiple browsers can inspect status, but they compete for the current audio queue; enable audio in only one browser tab.
+- Status and decoded audio use HTTP polling at approximately 180 ms. The server keeps a short bounded audio history so multiple browsers can monitor the shared receiver without consuming each other's audio.
 - Authentication is not implemented. Use the service only on a trusted LAN and do not expose port `8080` directly to the internet.

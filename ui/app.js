@@ -15,6 +15,8 @@ let channels = [],
   running = false,
   busy = false,
   lastSnapshot = null;
+let audioCursor = null,
+  audioGeneration = null;
 let sessionVisible = false,
   uiGeneration = 0;
 let messagesPaused = false;
@@ -1227,9 +1229,53 @@ async function poll() {
       const result = await invoke("snapshot", {
         selected: requestedChannel,
         automatic,
+        ...(webRuntime
+          ? {
+              audio_after: audioCursor,
+              audio_generation: audioGeneration,
+            }
+          : {}),
       });
+      if (
+        !result &&
+        webRuntime &&
+        generation === uiGeneration &&
+        (running || lastSnapshot)
+      ) {
+        running = false;
+        lastSnapshot = null;
+        recordingResumePending = false;
+        recordingStatus = emptyRecording();
+        audioCursor = null;
+        audioGeneration = null;
+        resetAudio();
+        $("state").textContent = "停止中";
+        $("state").classList.remove("active");
+        $("capture-info").textContent =
+          `中心 ${$("center").value} MHz · 設定は停止中に変更できます`;
+        $("progress").textContent = "";
+        for (const metric of [
+          "total-locked",
+          "total-data",
+          "total-voice",
+          "total-drops",
+        ])
+          $(metric).textContent = "—";
+        detail(null);
+        setControls();
+      }
       if (result && generation === uiGeneration) {
         const s = result.status;
+        if (webRuntime) {
+          audioGeneration = result.audio_generation;
+          const lastAudio = result.audio.at(-1);
+          if (lastAudio)
+            audioCursor = {
+              channel: lastAudio.channel,
+              epoch: lastAudio.epoch,
+              index: lastAudio.index,
+            };
+        }
         lastSnapshot = s;
         if (s.recording) recordingStatus = s.recording;
         running = s.running;
@@ -1335,6 +1381,12 @@ try {
   updateSource();
   constellation();
   if (native) {
+    if (webRuntime) {
+      // The receiver session belongs to the server, not to this page. Poll
+      // before this browser starts anything so another device's session is
+      // visible immediately.
+      sessionVisible = true;
+    }
     if (window.__TAURI__.window) {
       const appWindow = window.__TAURI__.window.getCurrentWindow();
       let closing = false;

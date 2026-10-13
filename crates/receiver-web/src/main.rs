@@ -5,12 +5,15 @@ use axum::{
     Json, Router,
 };
 use receiver_core::{
+    pipeline::Audio,
     recording::{OutputOptions, RecordingStatus},
     session::{Config, Session},
     source,
 };
+use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{
+    collections::{HashMap, VecDeque},
     env, fs,
     net::SocketAddr,
     path::{Path as FsPath, PathBuf},
@@ -19,10 +22,78 @@ use std::{
 use tower_http::{services::ServeDir, trace::TraceLayer};
 
 const MAX_PREFERENCES_BYTES: u64 = 128 * 1024;
+const AUDIO_HISTORY_FRAMES: usize = 40;
+
+#[derive(Clone, Deserialize)]
+struct AudioCursor {
+    channel: String,
+    epoch: u64,
+    index: u32,
+}
+
+#[derive(Default)]
+struct AudioHub {
+    generation: u64,
+    channels: HashMap<String, VecDeque<Audio>>,
+}
+impl AudioHub {
+    fn clear(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
+        self.channels.clear();
+    }
+
+    fn publish(&mut self, frames: Vec<Audio>) {
+        for frame in frames {
+            let history = self.channels.entry(frame.channel.clone()).or_default();
+            if history.back().is_some_and(|last| last.epoch != frame.epoch) {
+                history.clear();
+            }
+            if history
+                .back()
+                .is_some_and(|last| last.epoch == frame.epoch && last.index >= frame.index)
+            {
+                continue;
+            }
+            history.push_back(frame);
+            while history.len() > AUDIO_HISTORY_FRAMES {
+                history.pop_front();
+            }
+        }
+    }
+
+    fn read(
+        &self,
+        channel: Option<&str>,
+        after: Option<&AudioCursor>,
+        generation: Option<u64>,
+    ) -> Vec<Audio> {
+        let Some(channel) = channel else {
+            return Vec::new();
+        };
+        let Some(history) = self.channels.get(channel) else {
+            return Vec::new();
+        };
+        let after = after.filter(|cursor| {
+            generation == Some(self.generation) && cursor.channel.as_str() == channel
+        });
+        history
+            .iter()
+            .filter(|frame| match after {
+                None => true,
+                Some(cursor) => {
+                    frame.epoch > cursor.epoch
+                        || (frame.epoch == cursor.epoch && frame.index > cursor.index)
+                }
+            })
+            .cloned()
+            .collect()
+    }
+}
 
 #[derive(Clone)]
 struct AppState {
     receiver: Arc<Mutex<Option<Session>>>,
+    audio: Arc<Mutex<AudioHub>>,
     preferences_path: Arc<PathBuf>,
     recordings_dir: Arc<PathBuf>,
 }
@@ -104,6 +175,8 @@ fn invoke_blocking(command: &str, args: &Value, state: &AppState) -> Result<Valu
                 return Err("受信中です。停止してから設定を変更してください。".into());
             }
             *receiver = Some(Session::start(config)?);
+            drop(receiver);
+            state.audio.lock().map_err(|e| e.to_string())?.clear();
             Ok(Value::Null)
         }
         "stop" => {
@@ -114,6 +187,8 @@ fn invoke_blocking(command: &str, args: &Value, state: &AppState) -> Result<Valu
             } else {
                 RecordingStatus::default()
             };
+            drop(receiver);
+            state.audio.lock().map_err(|e| e.to_string())?.clear();
             serde_json::to_value(status).map_err(|e| e.to_string())
         }
         "start_recording" => {
@@ -152,13 +227,33 @@ fn invoke_blocking(command: &str, args: &Value, state: &AppState) -> Result<Valu
                 .get("automatic")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
+            let audio_after: Option<AudioCursor> = args
+                .get("audio_after")
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(|e| e.to_string())?
+                .flatten();
+            let audio_generation = args.get("audio_generation").and_then(Value::as_u64);
             let receiver = state.receiver.lock().map_err(|e| e.to_string())?;
             match receiver.as_ref() {
                 None => Ok(Value::Null),
                 Some(session) => {
-                    let (status, audio) =
+                    let (status, fresh_audio) =
                         session.snapshot_with_monitor(selected.as_deref(), automatic);
-                    Ok(json!({ "status": status, "audio": audio }))
+                    drop(receiver);
+                    let mut audio = state.audio.lock().map_err(|e| e.to_string())?;
+                    audio.publish(fresh_audio);
+                    let frames = audio.read(
+                        status.selected_channel.as_deref(),
+                        audio_after.as_ref(),
+                        audio_generation,
+                    );
+                    Ok(json!({
+                        "status": status,
+                        "audio": frames,
+                        "audio_generation": audio.generation
+                    }))
                 }
             }
         }
@@ -223,6 +318,7 @@ async fn main() {
 
     let state = AppState {
         receiver: Arc::new(Mutex::new(None)),
+        audio: Arc::new(Mutex::new(AudioHub::default())),
         preferences_path: Arc::new(config_dir.join("settings.json")),
         recordings_dir: Arc::new(recordings_dir),
     };
@@ -249,4 +345,63 @@ async fn main() {
         })
         .await
         .expect("Web server failed");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn frame(channel: &str, epoch: u64, index: u32) -> Audio {
+        Audio {
+            channel: channel.into(),
+            epoch,
+            index,
+            pcm: vec![index as i16],
+        }
+    }
+
+    #[test]
+    fn each_browser_cursor_reads_the_same_published_audio_once() {
+        let mut hub = AudioHub::default();
+        hub.publish(vec![frame("a", 2, 10), frame("a", 2, 11)]);
+        assert_eq!(hub.read(Some("a"), None, None).len(), 2);
+        assert_eq!(hub.read(Some("a"), None, None).len(), 2);
+        let cursor = AudioCursor {
+            channel: "a".into(),
+            epoch: 2,
+            index: 11,
+        };
+        assert!(hub.read(Some("a"), Some(&cursor), Some(0)).is_empty());
+        hub.publish(vec![frame("a", 2, 12)]);
+        assert_eq!(hub.read(Some("a"), Some(&cursor), Some(0))[0].index, 12);
+    }
+
+    #[test]
+    fn a_new_receiver_generation_invalidates_old_browser_cursors() {
+        let mut hub = AudioHub::default();
+        hub.publish(vec![frame("a", 4, 99)]);
+        let old = AudioCursor {
+            channel: "a".into(),
+            epoch: 4,
+            index: 99,
+        };
+        hub.clear();
+        hub.publish(vec![frame("a", 0, 1)]);
+        let replay = hub.read(Some("a"), Some(&old), Some(0));
+        assert_eq!(replay.len(), 1);
+        assert_eq!(replay[0].index, 1);
+    }
+
+    #[test]
+    fn audio_history_is_bounded_per_channel() {
+        let mut hub = AudioHub::default();
+        hub.publish(
+            (0..AUDIO_HISTORY_FRAMES as u32 + 5)
+                .map(|index| frame("a", 1, index))
+                .collect(),
+        );
+        let frames = hub.read(Some("a"), None, None);
+        assert_eq!(frames.len(), AUDIO_HISTORY_FRAMES);
+        assert_eq!(frames[0].index, 5);
+    }
 }
