@@ -99,9 +99,15 @@ impl Sequence {
                 }
             }
         }
-        let best = (0..STATES)
-            .min_by(|&a, &b| costs[a].total_cmp(&costs[b]))
-            .unwrap();
+        // The trellis always has 64 states, so selection is non-fallible.
+        // Seed with state 0 and retain the first minimum on ties, preserving
+        // min_by's ordering (including non-finite costs) without an unwrap.
+        let mut best = 0;
+        for (state, cost) in costs.iter().enumerate().skip(1) {
+            if cost.total_cmp(&costs[best]).is_lt() {
+                best = state;
+            }
+        }
         let best_prediction = predictions[best];
         let error = Complex32 {
             real: input.real - best_prediction.real,
