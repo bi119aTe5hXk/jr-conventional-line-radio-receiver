@@ -7,6 +7,7 @@ const operationMonitor = new OperationMonitorView(document);
 let sessionReplay = false;
 const $ = (id) => document.getElementById(id);
 const native = !!window.__TAURI__;
+const webRuntime = !!window.__JR_RECEIVER_WEB__;
 const invoke = (command, args) => window.__TAURI__.core.invoke(command, args);
 let channels = [],
   enabled = new Set(),
@@ -319,7 +320,7 @@ function setControls() {
   routePicker.setBlocked(running || busy);
   $("settings").disabled = running || busy;
   $("region").disabled = running || busy || !channels.length;
-  $("preset-browse").disabled = !native || running || busy;
+  $("preset-browse").disabled = !native || webRuntime || running || busy;
   $("preset-reload").disabled = !native || running || busy || !presetFile;
   $("preset-builtin").disabled = !native || running || busy || !presetFile;
   $("all").disabled = running || busy || !channels.length;
@@ -379,7 +380,7 @@ function renderRecording() {
   const receiving = running && lastSnapshot?.state === "receiving";
   $("record-directory").disabled = busy || active;
   $("output-options").disabled = busy || active;
-  $("record-browse").disabled = !native || busy || active;
+  $("record-browse").disabled = !native || webRuntime || busy || active;
   $("record-start").disabled = !native || busy || !receiving || active;
   $("record-stop").disabled = !native || busy || (!active && !recordingEnabled);
   $("record-stop").textContent = active ? "保存を停止" : "保存を無効にする";
@@ -1353,6 +1354,12 @@ try {
       "ブラウザプレビュー · 受信にはデスクトップアプリを起動してください";
     $("runtime-note").hidden = false;
     $("scan").disabled = true;
+    $("browse").disabled = true;
+  }
+  if (webRuntime) {
+    $("runtime-note").textContent =
+      "Web 版 · SDR と録音先はこのサーバー上にあります";
+    $("runtime-note").hidden = false;
     $("browse").disabled = true;
   }
 } catch (error) {
