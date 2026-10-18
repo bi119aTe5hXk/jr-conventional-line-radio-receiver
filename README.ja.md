@@ -232,7 +232,7 @@ cargo run --release -p jr-receiver --no-default-features -- --help
 ## 実装と検証
 
 - `crates/jr-conventional-dsp`：DSP、周波数変換・フィルター・タイミング／搬送波同期・等化。
-- [`crates/jr-voice`](crates/jr-voice/README.md)：純 Rust の CELP 合成、バージョン 1.2.0。現在・次フレームの合成候補を比較します。先読みは合計 160 ms。固定モデル係数は実行ファイルに内蔵します。
+- [`crates/jr-voice`](crates/jr-voice/README.md)：純 Rust の CELP 合成、バージョン 1.3.0。現在・次フレームの合成候補を比較します。先読みは合計7フレーム・280 ms。固定モデル係数は実行ファイルに内蔵します。
   実際の係数は `src/models/` にあります。
 - `crates/receiver-core`：同期、音声チャネル復号、RS / CRC、データ組み立て、LH5、日英テキスト、SoapySDR / RTL-TCP、同時受信ワーカー。
 - `src-tauri` / `ui`：日本語 GUI、受信制御、選択波の Web Audio 再生。

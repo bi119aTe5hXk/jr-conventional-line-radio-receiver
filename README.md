@@ -234,7 +234,7 @@ cargo run --release -p jr-receiver --no-default-features -- --help
 ## Implementation and validation
 
 - `crates/jr-conventional-dsp`: DSP for frequency translation, filtering, timing/carrier synchronization, and equalization.
-- [`crates/jr-voice`](crates/jr-voice/README.md): pure Rust CELP synthesis, version 1.2.0. The decoder compares current-frame and next-frame synthesis candidates with 160 ms total lookahead. Fixed model coefficients are compiled into the executable.
+- [`crates/jr-voice`](crates/jr-voice/README.md): pure Rust CELP synthesis, version 1.3.0. The decoder compares current-frame and next-frame synthesis candidates with seven frames (280 ms) of total lookahead. Fixed model coefficients are compiled into the executable.
 - `crates/receiver-core`: synchronization, voice-channel decoding, RS / CRC, data assembly, LH5, Japanese/English text, SoapySDR / RTL-TCP, and concurrent receive workers.
 - `src-tauri` / `ui`: Japanese GUI, reception controls, and Web Audio playback of the selected channel.
 - `crates/receiver-cli`: device enumeration, RTL-TCP monitoring, and IQ / frame-file decoding.
