@@ -1635,6 +1635,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "jr-demod-eval"
+version = "0.1.0"
+dependencies = [
+ "jr_conventional_dsp",
+ "receiver-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "jr-receiver"
 version = "1.7.0"
 dependencies = [
@@ -1659,7 +1669,7 @@ dependencies = [
 
 [[package]]
 name = "jr_conventional_dsp"
-version = "1.1.0"
+version = "1.2.0"
 
 [[package]]
 name = "jr_conventional_voice"

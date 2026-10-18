@@ -239,13 +239,48 @@ You can also build file decoding and RTL-TCP input without SoapySDR:
 cargo run --release -p jr-receiver --no-default-features -- --help
 ```
 
+### Demodulator evaluation (synthetic signals, development tool)
+
+The development tool `jr-demod-eval` (`crates/demod-eval`) measures demodulator performance without recordings. It is not part of the product (the desktop app and `jr-receiver`) or its releases. The receiver core builds its frame encoders only with the `synthesis` feature, which this tool enables. It encodes voice frames with random payloads, modulates them as pi/4-DQPSK (4,800 symbols/s, root raised cosine with 0.2 roll-off), passes them through a synthetic channel, and receives them with the production DSP, frame synchronizer, and voice decoder.
+The channel is a tapped delay line with per-path delay, power and carrier offset (`--paths DELAY_US:POWER_DB[:OFFSET_HZ]`), maximum Doppler shift (0 is static), an optional Rician K factor for the first path, carrier offset, and white Gaussian noise. Fading uses a Clarke-model sum of sinusoids normalized to unit average power. Es/N0 refers to the average received power.
+
+```sh
+# Static two-path (52 µs) channel, and 40 Hz Rayleigh fading (about 120 km/h)
+cargo run --release -p jr-demod-eval -- \
+  --es-n0 10,14,18,22,26,30 --paths 0:0,52:0 --frames 400 --seeds 3
+cargo run --release -p jr-demod-eval -- \
+  --es-n0 10,14,18,22,26,30 --doppler 40 --frames 400 --seeds 3
+```
+
+A per-Es/N0 summary goes to standard error and JSON to standard output. The main fields are:
+
+| Field | Meaning |
+| --- | --- |
+| `symbol_error_rate` / `bit_error_rate` | Differential symbol and bit error rates before FEC, aligned with the transmission block by block. Blocks that cannot be aligned count as `symbols_unaligned` |
+| `voice_acceptance` | Fraction of transmitted voice frames whose protected bits were accepted correctly |
+| `voice_false` | Accepted frames whose protected bits match nothing transmitted (undetected errors) |
+| `alternate_accepted` | Frames accepted only because the alternate (RLS) detector's frame decoded. `--single` disables the alternate for comparison |
+| `clock_slips` | Symbols the receiver inserted or dropped (clock slips), counted from alignment changes between blocks |
+| `data_accepted` / `data_false` | With `--traffic data`, data frames whose 28 information bytes were recovered exactly, and frames accepted with content never transmitted |
+| `unprotected_bit_errors` | Errors in the 80 payload bits the radio format leaves unprotected, over accepted frames |
+| `fade_bins` | Compared symbols and errors by instantaneous channel power relative to its average at each symbol centre, split at −20 / −10 / −5 / 0 dB. Separates errors confined to fades (noise-limited) from errors that persist in strong signal (tracking-limited) |
+
+Per-path offsets model several base stations transmitting the same channel at once: their slightly different carriers beat, and their transmissions are offset in time. For example, `--paths 0:0,208:0:5` is two equal-power stations, the second one symbol later and 5 Hz off.
+`--traffic data` sends data frames (RS(42,30) and CRC-16). `--hard` decodes without the soft reliabilities, so the soft-decision gain can be compared in one build.
+`--receiver differential` is a reference detector for comparison: a matched filter at the known symbol timing followed by differential detection. It needs no tracking, so it indicates what a non-coherent detector achieves on the same channel. It is not used for reception.
+The first three frames train acquisition and are excluded. Results are reproducible per seed.
+
 ## Implementation and validation
 
-- `crates/jr-conventional-dsp`: DSP for frequency translation, filtering, timing/carrier synchronization, and equalization.
+- `crates/jr-conventional-dsp`: DSP for frequency translation, filtering, timing/carrier synchronization, and equalization. There are two sequence detectors: the primary tracks the channel with LMS (low noise, for static or low-SNR reception), and the alternate uses RLS on each tap and its rate of change (a constant-velocity model) to follow fast time-varying channels, such as a train moving through an area where several base stations transmit the same channel at once. The alternate has its own carrier loop, and both emit decisions at the same latency. Besides hard decisions, each emits a reliability per bit (soft decisions), derived from the differential product of ISI-cancelled observations weighted by the channel estimate, so it shrinks in fades and is zero where the signal was lost.
 - [`crates/jr-voice`](crates/jr-voice/README.md): pure Rust CELP synthesis, version 1.3.0. The decoder compares current-frame and next-frame synthesis candidates with seven frames (280 ms) of total lookahead. Fixed model coefficients are compiled into the executable.
 - `crates/receiver-core`: synchronization, voice-channel decoding, RS / CRC, data assembly, LH5, Japanese/English text, SoapySDR / RTL-TCP, and concurrent receive workers.
+  Both decision streams are frame-synchronized separately, and frames covering the same span (starts less than half a frame apart) are paired: the primary frame is used if it decodes as voice or data, otherwise the alternate frame if it does. Chosen frames are placed on the 384-bit grid, and `alternate_frames` in the status counts alternate picks. Running both detectors roughly doubles per-channel CPU load.
+  Frame synchronization checks the marker opening each 128-bit segment and realigns a segment by one symbol when a timing slip has inserted or dropped a symbol. Instead of losing lock and spending three frames to reacquire, it keeps the remaining segments and the following frames. Reported bit offsets stay on the 384-bit grid.
+  Frames the hard-decision decoders reject are decoded again with the reliabilities: soft-decision Viterbi decoding for voice with errors-and-erasures repair of its Reed–Solomon tail (up to six least reliable bytes erased), and RS(42,30) decoding with up to eight least reliable bytes erased for data. Acceptance still requires the CRCs and, for voice, a matching CRC-16/RS tail.
 - `src-tauri` / `ui`: Japanese GUI, reception controls, and Web Audio playback of the selected channel.
 - `crates/receiver-cli`: device enumeration, RTL-TCP monitoring, and IQ / frame-file decoding.
+- `crates/demod-eval`: development tool for demodulator evaluation with synthetic signals and channels; not part of the product or its releases.
 
 IQ is acquired once and distributed through reference-counted buffers to bounded per-channel queues.
 Each channel has its own DSP, synchronization, voice, and data state and runs on a separate thread.

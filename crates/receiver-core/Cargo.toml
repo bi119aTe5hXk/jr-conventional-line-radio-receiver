@@ -8,6 +8,9 @@ publish.workspace = true
 [features]
 default = ["soapy"]
 soapy = []
+# Frame encoders for development tools such as the demodulator evaluator.
+# The receiver never encodes frames; release builds leave this off.
+synthesis = []
 
 [dependencies]
 jr_conventional_dsp = { path = "../jr-conventional-dsp" }

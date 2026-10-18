@@ -206,6 +206,7 @@ fn decode_frames(input: &str, out: &str, format: Format) -> Result<()> {
             bit_offset: index as u64 * 384,
             sync_matched: false,
             marker_errors: 0,
+            confidence: Vec::new(),
         };
         output.frame(&f)?;
         for a in p.frame(&f)? {
