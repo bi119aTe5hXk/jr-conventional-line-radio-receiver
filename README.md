@@ -1,4 +1,4 @@
-# JR Cconventional-line Radio Receiver
+# JR Conventional-line Radio Receiver
 
 English | [日本語](README.ja.md)
 
@@ -51,7 +51,9 @@ Use “再読み込み” (Reload) to apply edits, or “組み込みに戻す�
    The default “簡易” (Compact) view shows frequency, allocation, and synchronization status in tiles that adapt to the window width.
    “詳細” (Detailed) shows the format and voice/data counts in a table. Switching views does not affect reception, recording, the selected channel, or search filters.
 3. The initial center frequency is **352.603125 MHz**, with a requested sample rate of **240,000 S/s**.
-   Choose a different rate if required by your hardware. SoapySDR validates bandwidth using the sample rate and center frequency read back from the device.
+   Choose a different rate if required by your hardware. The “サンプルレートの候補” (Sample-rate candidates) buttons below the fields set common values: 240k, 288k, 1.024M, 2.048M, and 2.4M for RTL-TCP, and 240k, 250k, 1M, and 2.048M for SoapySDR.
+   Below them, the app shows the RTL-TCP supported ranges and the rate needed to demodulate every enabled channel at the current center frequency, leading with a warning when the rate is too low or out of range. Starting reception still validates the value in the field.
+   SoapySDR validates bandwidth using the sample rate and center frequency read back from the device.
    RTL-TCP does not support reading settings back, so the app displays and uses the requested values.
    Changing profiles selects the corresponding center frequency and recommended rate: **352.603125 MHz** for JR East / West,
    **352.625000 MHz** for JR Central, and **240 kS/s** for all three.
@@ -76,9 +78,11 @@ Allow additional margin for the hardware's usable bandwidth and anti-aliasing ch
 If a device does not support the default 240 kS/s, choose a supported higher rate, such as 1.024 MS/s.
 Hardware support depends on the available [SoapySDR drivers](https://github.com/pothosware/SoapySDR/wiki).
 
-The overview shows the number of enabled and synchronized channels, valid data messages, voice frames, and dropped processing blocks.
+The session bar below the title holds the reception state, “受信を開始” (Start) and “停止” (Stop), the selected channel (frequency, allocation, and sync state), the synchronized count, and “音声を聴く” (Listen).
+On screens taller than 36rem and wider than 36rem it stays pinned to the top while scrolling, and anchored or focused targets are offset so the bar never covers them. The selected channel links to the selected-channel monitor. Narrow windows omit the allocation name in the bar.
+Below it, the overview shows the number of enabled and synchronized channels, valid data messages, voice frames, and dropped processing blocks.
 Search only filters the visible list; it does not change which channels are received.
-The channel list and selected-channel monitor start collapsed. Open their headers when you need channel selection, reception diagnostics, or playback settings; closing them keeps reception, audio, and data updates running. The operation monitor and received data appear side by side on wide screens, with navigation links above them. Audio on/off stays visible, and the received-data panel shows its selected frequency and a link to open the channel list. Preset errors and channel-selection validation reveal the relevant controls automatically.
+The channel list and selected-channel monitor start collapsed. Open their headers when you need to choose receive targets, reception diagnostics, or playback settings; closing them keeps reception, audio, and data updates running. The operation monitor and received data appear side by side on wide screens, with navigation links above them, including one to recording and data output. Audio on/off stays available in the session bar, and the received-data panel shows its selected frequency and a link to open the channel list. Preset errors and channel-selection validation reveal the relevant controls automatically.
 “更新を一時停止” (Pause updates) freezes the selected channel’s message log while decoding and the operation monitor continue. On narrow screens, the detailed list becomes cards.
 
 “運行把握モニタ” (Operation monitor), below the channel list, shows line-level delay counts, trains on the line, three delay classes, maximum delay, and its train number from supported JR East common-wave messages. Enable the common channel with the “一斉” format. The table updates independently of audio selection, saving, and the message-log pause. Narrow layouts show each line as a labeled record; missing values say “不明” (Unknown), rather than zero.
@@ -141,7 +145,8 @@ The “保存内容・保存先” (Output formats and destination) section is c
 Formats can be selected independently, including JSONL-only output. Stop saving before changing them.
 Status and start/stop controls remain visible. An error expands the settings, and its message remains visible if they are collapsed again.
 
-The default output directory is `JR Cconventional-line Radio Receiver/Recordings` inside the operating system's Music folder.
+The default output directory is `JR Conventional-line Radio Receiver/Recordings` inside the operating system's Music folder.
+Earlier versions defaulted to the misspelled `JR Cconventional-line Radio Receiver/Recordings`. The output directory is stored in the settings, so settings carried over from an earlier version keep using that folder.
 The app uses the known Music folder on Windows, `~/Music` on macOS, and `XDG_MUSIC_DIR` on Linux, falling back to `~/Music` if the OS location cannot be determined.
 The default directory is created when recording starts if it does not exist. You can also select or enter another existing directory.
 If the default cannot be resolved or created, the recording section displays an error and lets you choose another destination.

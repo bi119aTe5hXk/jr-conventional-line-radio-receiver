@@ -48,6 +48,9 @@
 * {
   box-sizing: border-box;
 }
+html {
+  scroll-padding-block-start: var(--session-bar-height, 0px);
+}
 body {
   margin: 0;
   background: var(--bg);
@@ -168,7 +171,7 @@ small,
   color: var(--muted);
   font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   margin-block-end: 4px;
 }
@@ -180,7 +183,6 @@ small,
   justify-content: space-between;
   gap: 24px;
   align-items: center;
-  border-block-end: 1px solid var(--line);
 }
 .brand {
   display: flex;
@@ -190,6 +192,7 @@ small,
 }
 .brand .eyebrow {
   text-transform: none;
+  letter-spacing: 0;
 }
 .brand-icon {
   display: block;
@@ -204,7 +207,70 @@ small,
   align-items: center;
   flex-wrap: wrap;
 }
+/* Session controls and live state stay reachable while monitoring. */
+.session-bar {
+  background: var(--bg);
+  border-block-end: 1px solid var(--line);
+  z-index: 10;
+}
+.session-bar-inner {
+  max-width: 1800px;
+  margin-inline: auto;
+  padding: 10px 32px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 32px;
+}
+.session-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+  flex: 1 1 18rem;
+  min-width: 0;
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+.session-facts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.session-facts dt {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.session-facts dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+#bar-channel {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  min-height: 24px;
+  min-width: 0;
+}
+#bar-frequency {
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-body);
+}
+.session-channel-label {
+  overflow-wrap: anywhere;
+}
+@media (min-width: 36.01rem) and (min-height: 36rem) {
+  .session-bar {
+    position: sticky;
+    top: 0;
+  }
+}
 .badge {
+  font-variant-numeric: tabular-nums;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -323,6 +389,29 @@ fieldset {
   grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
   gap: 12px;
 }
+.rate-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-block-start: 12px;
+}
+.rate-presets-label {
+  color: var(--muted);
+  font-size: var(--text-caption);
+  margin-inline-end: 6px;
+}
+.rate-presets button {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+.rate-presets button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--selected);
+  color: var(--accent);
+}
 #device-group,
 .file-row {
   display: flex;
@@ -373,6 +462,7 @@ fieldset {
   flex-wrap: wrap;
   color: var(--muted);
   font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
 }
 .workspace {
   display: grid;
@@ -417,7 +507,7 @@ fieldset {
 }
 .panel-summary h2 {
   display: inline;
-  font-size: var(--text-body);
+  font-size: var(--text-heading);
 }
 .panel-summary-meta {
   display: block;
@@ -458,6 +548,7 @@ fieldset {
 .section-title p:not(.eyebrow) {
   color: var(--muted);
   font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
   margin-block-start: 6px;
 }
 .region {
@@ -522,6 +613,11 @@ fieldset {
   font-size: 0.75rem;
   color: var(--muted);
 }
+.filter-note a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
 .view-switch {
   display: flex;
   gap: 4px;
@@ -549,7 +645,8 @@ fieldset {
   min-width: 0;
   padding: 2px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  /* Concentric with the 6px button: 2px padding + 1px border. */
+  border-radius: 9px;
   background: var(--inset);
 }
 .channel-tile.selected {
@@ -809,6 +906,7 @@ figcaption {
 .recording-info {
   padding: 12px 22px 20px;
   font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -1055,7 +1153,7 @@ body:has(#about-dialog[open]) {
 @media (prefers-reduced-motion: no-preference) {
   button {
     transition:
-      transform 100ms cubic-bezier(0.2, 0, 0, 1),
+      transform 150ms ease-out,
       background-color 100ms cubic-bezier(0.2, 0, 0, 1);
   }
   button:enabled:active {
@@ -1105,6 +1203,14 @@ body:has(#about-dialog[open]) {
     flex-direction: column;
     padding: 20px;
   }
+  .session-bar-inner {
+    padding-inline: 20px;
+    gap: 8px 20px;
+  }
+  /* The full label stays in the monitor panel; keep the bar to two rows. */
+  .session-channel-label {
+    display: none;
+  }
   main {
     padding-inline: 20px;
   }
@@ -1131,8 +1237,14 @@ body:has(#about-dialog[open]) {
     padding: 16px;
     gap: 16px;
   }
+  .session-bar-inner {
+    padding-inline: 16px;
+  }
   main {
     padding-inline: 16px;
+  }
+  .tcp-fields {
+    grid-template-columns: minmax(0, 1fr);
   }
   h1 {
     font-size: 1.125rem;

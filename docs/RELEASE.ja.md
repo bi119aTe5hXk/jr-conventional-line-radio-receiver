@@ -2,7 +2,7 @@
 
 [English](RELEASE.md) | 日本語
 
-JR Cconventional-line Radio Receiver (JR 在来線デジタル列車無線受信アプリ)
+JR Conventional-line Radio Receiver (JR 在来線デジタル列車無線受信アプリ)
 
 ## 配布物
 

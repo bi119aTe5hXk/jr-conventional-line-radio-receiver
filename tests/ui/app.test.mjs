@@ -3,7 +3,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { JSDOM } from "jsdom";
-import { makeInput } from "../../ui/config.mjs";
+import {
+  makeInput,
+  requiredRate,
+  RATE_CANDIDATES,
+  rtlTcpRateSupported,
+} from "../../ui/config.mjs";
 import { buildCatalog } from "../../ui/presets.mjs";
 import { AudioPlayer } from "../../ui/audio.mjs";
 import { OperationMonitorView } from "../../ui/operation-monitor.mjs";
@@ -22,7 +27,7 @@ const catalog = buildCatalog(
 );
 const presets = catalog.find((p) => p.id === "east").channels;
 const defaultRecordingDirectory =
-  "/home/listener/Music/JR Cconventional-line Radio Receiver/Recordings";
+  "/home/listener/Music/JR Conventional-line Radio Receiver/Recordings";
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 function status(messages = []) {
   return {
@@ -129,7 +134,7 @@ async function setup(
   let snapshot = { status: status(), audio: [] };
   let recording = { state: "idle", files: 0, pcm_samples: 0, error: null };
   let closeHandler;
-  w.testDependencies = { makeInput, buildCatalog, AudioPlayer, OperationMonitorView, RoutePicker };
+  w.testDependencies = { makeInput, requiredRate, RATE_CANDIDATES, rtlTcpRateSupported, buildCatalog, AudioPlayer, OperationMonitorView, RoutePicker };
   w.structuredClone = structuredClone;
   // jsdom has no native modal behavior. Exercise our handlers, not a focus trap
   // or Escape key implementation; those belong to the browser's dialog element.
@@ -254,7 +259,7 @@ async function setup(
     };
   };
   await w.eval(
-    `(async () => {const { makeInput, buildCatalog, AudioPlayer, OperationMonitorView, RoutePicker } = window.testDependencies;\n${source}\n})()`,
+    `(async () => {const { makeInput, requiredRate, RATE_CANDIDATES, rtlTcpRateSupported, buildCatalog, AudioPlayer, OperationMonitorView, RoutePicker } = window.testDependencies;\n${source}\n})()`,
   );
   const $ = (id) => w.document.getElementById(id);
   if (!catalogError)
@@ -1051,7 +1056,7 @@ test("about dialog shows product and author, restores focus, and leaves receptio
     ui.w.document.querySelector("footer").textContent,
     /Author|KIRISHIKI|protonmail/,
   );
-  assert.match(dialog.textContent, /JR Cconventional-line Radio Receiver/);
+  assert.match(dialog.textContent, /JR Conventional-line Radio Receiver/);
   assert.match(dialog.textContent, /JR 在来線デジタル列車無線受信アプリ/);
   assert.match(dialog.textContent, /v1\.6\.0/);
   assert.match(dialog.textContent, /KIRISHIKI Yudai/);
@@ -1686,4 +1691,88 @@ test("operation monitor selects by reception time and ignores legacy message dat
   view.update(s, { channels: s.channels.map((c) => c.config), enabled: new Set(), running: true, replay: true });
   assert.equal(app.$("operation-received-label").textContent, "最終読取日時");
   assert.equal(app.$("operation-state").textContent, "IQ再生 · 受信済み");
+});
+test("sample-rate candidates follow the input kind and explain the required bandwidth", async (t) => {
+  const ui = await setup(t);
+  const chips = () => [...ui.$("rate-presets").querySelectorAll("button")];
+  assert.deepEqual(
+    chips().map((b) => Number(b.value)),
+    [240000, 288000, 1024000, 2048000, 2400000],
+  );
+  assert.match(ui.$("rate-hint").textContent, /139,650 S\/s を超えるレート/);
+  assert.equal(ui.$("rate").getAttribute("aria-describedby"), "rate-hint");
+  chips()[2].click();
+  await tick();
+  assert.equal(ui.$("rate").value, "1024000");
+  assert.deepEqual(
+    chips().map((b) => b.getAttribute("aria-pressed")),
+    ["false", "false", "true", "false", "false"],
+  );
+  assert.equal(chips()[2].getAttribute("aria-label").startsWith("1.024M"), true);
+  ui.input("rate", "500000");
+  assert.match(ui.$("rate-hint").textContent, /RTL-TCP の対応範囲外/);
+  ui.input("rate", "240000");
+  ui.input("center", "352.70");
+  assert.match(ui.$("rate-hint").textContent, /帯域が足りません/);
+  await ui.change("input-kind", "sdr");
+  assert.deepEqual(
+    chips().map((b) => Number(b.value)),
+    [240000, 250000, 1000000, 2048000],
+  );
+  await ui.change("input-kind", "wave");
+  assert.equal(ui.$("rate-presets").hidden, true);
+  assert.equal(ui.$("rate-hint").hidden, true);
+});
+test("an invalid rate keeps its hint while pointing at the error", async (t) => {
+  const ui = await setup(t);
+  ui.input("rate", "500000");
+  await ui.click("start");
+  assert.equal(ui.$("rate").getAttribute("aria-invalid"), "true");
+  assert.equal(
+    ui.$("rate").getAttribute("aria-describedby"),
+    "field-error rate-hint",
+  );
+  ui.input("rate", "240000");
+  await ui.click("start");
+  assert.equal(ui.$("rate").getAttribute("aria-describedby"), "rate-hint");
+});
+test("session bar mirrors the selected channel, its sync state and locked count", async (t) => {
+  const ui = await setup(t);
+  const first = presets[0];
+  assert.equal(
+    ui.$("bar-frequency").textContent,
+    (first.frequency_hz / 1e6).toFixed(5),
+  );
+  assert.equal(ui.$("bar-channel-label").textContent, first.label);
+  assert.equal(ui.$("bar-enabled").textContent, String(presets.length));
+  assert.equal(ui.$("bar-locked").textContent, "—");
+  await ui.click("start");
+  await ui.poll();
+  assert.equal(ui.$("bar-locked").textContent, "3");
+  assert.equal(ui.$("bar-sync").textContent, "同期中");
+  assert.equal(ui.$("bar-sync").className, "locked");
+  ui.$("channels-simple").children[5].querySelector(".channel-select").click();
+  assert.equal(
+    ui.$("bar-frequency").textContent,
+    (presets[5].frequency_hz / 1e6).toFixed(5),
+  );
+  await ui.poll();
+  assert.equal(ui.$("bar-sync").textContent, "探索中");
+  ui.$("bar-channel").click();
+  assert.equal(ui.$("monitor-panel").open, true);
+});
+test("errors reach a live region that is present before the message appears", async (t) => {
+  const ui = await setup(t, { catalogError: "設定の検証に失敗しました" });
+  assert.equal(ui.$("alert-announcer").getAttribute("role"), "alert");
+  assert.equal(ui.$("alert-announcer").hidden, false);
+  assert.match(ui.$("alert-announcer").textContent, /設定の検証に失敗しました/);
+  assert.equal(ui.$("error").hasAttribute("role"), false);
+});
+test("route dialog errors are announced inside the modal", async (t) => {
+  const ui = await setup(t);
+  await ui.click("route-open");
+  await ui.click("route-apply");
+  assert.equal(ui.$("route-dialog").contains(ui.$("route-announcer")), true);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.match(ui.$("route-announcer").textContent, /1つ以上選択/);
 });

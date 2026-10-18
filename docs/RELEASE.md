@@ -2,7 +2,7 @@
 
 English | [日本語](RELEASE.ja.md)
 
-JR Cconventional-line Radio Receiver
+JR Conventional-line Radio Receiver
 
 ## Distribution archives
 
