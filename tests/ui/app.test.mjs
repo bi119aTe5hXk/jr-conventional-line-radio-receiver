@@ -323,6 +323,7 @@ test("route draft is searchable, cancelable, and only applies explicit receive t
   const ui = await setup(t);
   ui.$("channels-simple").children[0].querySelector(".channel-select").click();
   const frequency = ui.$("selected-frequency").textContent;
+  ui.$("channels-panel").open = false;
   await ui.click("route-open");
   assert.equal(ui.$("channels-panel").open, false);
   assert.equal(ui.w.document.activeElement.id, "route-search");
@@ -334,13 +335,13 @@ test("route draft is searchable, cancelable, and only applies explicit receive t
   visible[0].querySelector("input").click();
   assert.equal(ui.$("route-selected-count").textContent, "1 区間 · 4 波");
   assert.match(ui.$("route-frequencies").textContent, /352\.61250 MHz/);
-  assert.equal(ui.$("total-enabled").textContent, "22");
+  assert.equal(ui.$("bar-enabled").textContent, "22");
   ui.input("route-search", "該当なし");
   assert.equal(ui.$("route-no-results").hidden, false);
   assert.equal(ui.$("route-chosen").children.length, 1);
   ui.$("route-search").dispatchEvent(new ui.w.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
   assert.equal(ui.$("route-dialog").open, false);
-  assert.equal(ui.$("total-enabled").textContent, "22");
+  assert.equal(ui.$("bar-enabled").textContent, "22");
   assert.equal(ui.w.document.activeElement.id, "route-open");
   await ui.click("route-open");
   assert.equal(ui.$("route-chosen").children.length, 0);
@@ -348,7 +349,7 @@ test("route draft is searchable, cancelable, and only applies explicit receive t
   [...ui.$("route-results").children].find((n) => !n.hidden).querySelector("input").click();
   await ui.click("route-apply");
   assert.equal(ui.$("route-dialog").open, false);
-  assert.equal(ui.$("total-enabled").textContent, "4");
+  assert.equal(ui.$("bar-enabled").textContent, "4");
   assert.equal(ui.$("selected-frequency").textContent, frequency);
   assert.equal(ui.$("auto-select").checked, false);
   assert.equal(ui.calls.some((c) => c.command === "start"), false);
@@ -381,7 +382,7 @@ test("route selection switches company after confirmation and supports legacy ex
   await ui.click("route-apply");
   assert.equal(ui.$("region").value, "central");
   assert.equal(ui.$("center").value, "352.625000");
-  assert.equal(ui.$("total-enabled").textContent, "3");
+  assert.equal(ui.$("bar-enabled").textContent, "3");
   assert.equal(ui.calls.some((c) => c.command === "start"), false);
   await ui.click("preset-browse");
   await ui.click("route-open");
@@ -725,7 +726,7 @@ test("cancelled or invalid external files preserve the active catalog, while rel
   assert.equal(ui.$("preset-settings").open, true);
   assert.equal(ui.$("region").value, "custom-central");
   assert.equal(ui.$("center").value, "352.626");
-  assert.equal(ui.$("total-enabled").textContent, "0");
+  assert.equal(ui.$("bar-enabled").textContent, "0");
   assert.deepEqual(ui.preferences.value, saved);
   presetFiles.path = "/tmp/other-missing.json";
   await ui.click("preset-browse");
@@ -739,7 +740,7 @@ test("cancelled or invalid external files preserve the active catalog, while rel
     "更新済み <script>",
   );
   assert.equal(ui.$("region").querySelector("script"), null);
-  assert.equal(ui.$("total-enabled").textContent, "3");
+  assert.equal(ui.$("bar-enabled").textContent, "3");
   assert.equal(ui.$("center").value, "352.625000");
   assert.equal(ui.$("preset-error").hidden, true);
 });
@@ -761,7 +762,8 @@ test("missing saved catalogs block reception and can recover without losing save
   assert.equal(ui.$("region").disabled, true);
   assert.equal(ui.$("channels-simple").children.length, 0);
   assert.equal(ui.$("preset-error").hidden, false);
-  assert.equal(ui.$("channels-panel").open, true);
+  assert.equal(ui.$("source-panel").open, true);
+  assert.equal(ui.$("preset-settings").open, true);
   assert.equal(ui.$("preset-path").textContent, path);
   await ui.click("start");
   assert.equal(
@@ -823,8 +825,10 @@ test("loading locks receiving controls and a removed saved profile selects and p
 });
 test("automatic selection plays the returned channel while a manual choice pins both views", async (t) => {
   const ui = await setup(t);
-  assert.equal(ui.$("channels-panel").open, false);
-  assert.equal(ui.$("monitor-panel").open, false);
+  // Live panels start open; a listener who collapses them keeps that choice.
+  assert.equal(ui.$("channels-panel").open, true);
+  assert.equal(ui.$("monitor-panel").open, true);
+  ui.$("channels-panel").open = ui.$("monitor-panel").open = false;
   assert.equal(ui.$("auto-select").checked, true);
   ui.$("listen").checked = true;
   await ui.click("start");
@@ -1403,7 +1407,10 @@ test("default source requires a user endpoint; filtering never removes active ch
   const ui = await setup(t, { configureConnection: false });
   assert.equal(ui.$("host").value, "");
   assert.equal(ui.$("port").value, "");
-  assert.equal(ui.$("source-summary").textContent, "RTL-TCP · 接続先未設定");
+  assert.equal(
+    ui.$("source-summary").textContent,
+    "JR 東日本（22波） · RTL-TCP · 接続先未設定",
+  );
   await ui.click("start");
   assert.equal(ui.w.document.activeElement.id, "host");
   assert.equal(
@@ -1418,7 +1425,10 @@ test("default source requires a user endpoint; filtering never removes active ch
     false,
   );
   ui.input("port", "1234");
-  assert.equal(ui.$("source-summary").textContent, "RTL-TCP · 127.0.0.1:1234");
+  assert.equal(
+    ui.$("source-summary").textContent,
+    "JR 東日本（22波） · RTL-TCP · 127.0.0.1:1234",
+  );
   assert.equal(
     ui.calls.some((c) => c.command === "start"),
     false,
@@ -1435,7 +1445,7 @@ test("default source requires a user endpoint; filtering never removes active ch
   assert.equal(ui.$("settings").disabled, true);
   assert.equal(ui.w.document.activeElement.id, "stop");
   await ui.poll();
-  assert.equal(ui.$("total-locked").textContent, "3");
+  assert.equal(ui.$("bar-locked").textContent, "3");
   assert.equal(ui.$("total-data").textContent, "418");
   ui.setSnapshot({
     status: { ...status(), running: false, state: "stopped" },
@@ -1760,6 +1770,31 @@ test("session bar mirrors the selected channel, its sync state and locked count"
   assert.equal(ui.$("bar-sync").textContent, "探索中");
   ui.$("bar-channel").click();
   assert.equal(ui.$("monitor-panel").open, true);
+  assert.equal(ui.$("bar-recording").textContent, "未保存");
+  await ui.click("record-start");
+  ui.setRecording({ state: "recording", files: 0, pcm_samples: 0, error: null });
+  await ui.poll();
+  assert.equal(ui.$("bar-recording").textContent, "保存中");
+  assert.equal(ui.$("bar-recording").getAttribute("href"), "#recording-title");
+});
+test("live monitoring precedes secondary sections in document order", async (t) => {
+  const ui = await setup(t);
+  const order = ["session-bar", "source-panel", "channels-panel", "monitor-panel", "operation-title", "messages-title", "recording-title"];
+  const nodes = order.map((id) => ui.$(id));
+  for (let i = 1; i < nodes.length; i++)
+    assert.equal(
+      nodes[i - 1].compareDocumentPosition(nodes[i]) & ui.w.Node.DOCUMENT_POSITION_FOLLOWING,
+      ui.w.Node.DOCUMENT_POSITION_FOLLOWING,
+      `${order[i - 1]} should precede ${order[i]}`,
+    );
+  assert.equal(ui.$("source-panel").contains(ui.$("region")), true);
+  // Listening mode controls stay reachable; manual pinning is explained in the monitor.
+  for (const id of ["listen", "auto-select"])
+    assert.equal(ui.$("session-bar").contains(ui.$(id)), true);
+  assert.equal(ui.$("monitor-panel").contains(ui.$("selection-hint")), true);
+  ui.$("channels-simple").children[2].querySelector(".channel-select").click();
+  assert.equal(ui.$("auto-select").checked, false);
+  assert.match(ui.$("selection-hint").textContent, /受信バーの「通話を自動選択」/);
 });
 test("errors reach a live region that is present before the message appears", async (t) => {
   const ui = await setup(t, { catalogError: "設定の検証に失敗しました" });

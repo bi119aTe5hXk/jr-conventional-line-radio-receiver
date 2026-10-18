@@ -297,48 +297,45 @@ main {
   margin-inline: auto;
   padding: 0 32px 24px;
 }
+/* Aggregate counters are context, not the task: one quiet line. */
 .overview {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 32px;
-  padding-block: 28px;
-}
-.overview-intro > p:last-child {
-  font-size: var(--text-caption);
-  color: var(--muted);
-  margin-block-start: 6px;
-}
-.band-range {
-  font-family: ui-monospace, monospace;
-  font-size: 1.125rem;
-  font-variant-numeric: tabular-nums;
-}
-.band-range span {
-  color: var(--muted);
-  margin-inline: 6px;
+  padding-block: 12px;
 }
 .totals {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 24px;
-  flex: 1;
-  max-width: 760px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 28px;
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+.totals > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
 }
 .totals dt {
   color: var(--muted);
-  font-size: var(--text-caption);
   white-space: nowrap;
 }
 .totals dd {
-  font-size: 1.75rem;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  margin-block-start: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
-.totals small {
-  margin-inline-start: 5px;
+.band-range {
+  font-family: ui-monospace, monospace;
+}
+.band-range span {
+  color: var(--muted);
+  margin-inline: 4px;
+}
+#band-note {
+  color: var(--muted);
 }
 .card {
   background: var(--surface);
@@ -491,7 +488,7 @@ fieldset {
   padding-block: 8px;
 }
 .listening-control {
-  gap: 8px 12px;
+  gap: 0 20px;
   font-size: var(--text-caption);
 }
 .workspace-tools {
@@ -555,8 +552,18 @@ fieldset {
   min-width: 9rem;
   max-width: 100%;
 }
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px 24px;
+  margin-block-end: 16px;
+}
+.preset-row .region {
+  flex: 0 1 18rem;
+}
 .preset-settings {
-  margin: 0 22px 16px;
+  margin: 0;
   color: var(--muted);
   font-size: var(--text-caption);
   overflow-wrap: anywhere;
@@ -572,7 +579,7 @@ fieldset {
   margin-block: 12px;
 }
 .preset-feedback {
-  padding: 0 22px 16px;
+  padding: 0 0 12px;
   overflow-wrap: anywhere;
   font-size: var(--text-caption);
 }
@@ -584,7 +591,7 @@ fieldset {
   flex-wrap: wrap;
   gap: 16px;
   align-items: center;
-  padding-inline: 22px;
+  padding: 16px 22px 0;
 }
 .search-label {
   flex: 1 1 10rem;
@@ -777,7 +784,7 @@ tr.selected {
   line-height: 1.8;
 }
 .frequency-heading {
-  padding: 0 22px 22px;
+  padding: 16px 22px 8px;
 }
 .frequency-heading > p:first-child {
   font-family: ui-monospace, monospace;
@@ -839,7 +846,7 @@ figcaption {
   margin-block-start: 10px;
 }
 .recording {
-  margin-block: 20px;
+  margin-block: 24px 0;
 }
 .recording-bar,
 .recording-heading,
@@ -896,7 +903,7 @@ figcaption {
   padding: 0;
 }
 .monitor-selection {
-  padding: 16px 22px;
+  padding: 0 22px 16px;
 }
 #selection-hint {
   color: var(--muted);
@@ -1167,15 +1174,6 @@ body:has(#about-dialog[open]) {
   }
 }
 @media (max-width: 78rem) {
-  .overview {
-    align-items: start;
-    flex-direction: column;
-    gap: 20px;
-  }
-  .totals {
-    max-width: none;
-    width: 100%;
-  }
   .source-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1253,22 +1251,6 @@ body:has(#about-dialog[open]) {
     width: 36px;
     flex-basis: 36px;
   }
-  .overview {
-    padding-block: 24px;
-  }
-  .band-range {
-    font-size: 0.9375rem;
-  }
-  .band-range small {
-    display: block;
-  }
-  .totals {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
-  }
-  .totals dd {
-    font-size: 1.5rem;
-  }
   .source-grid,
   .advanced-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -1308,7 +1290,6 @@ body:has(#about-dialog[open]) {
   .recording-hint,
   .recording-controls,
   .recording-info,
-  .preset-feedback,
   .output-options,
   .monitor-selection,
   .message-channel-bar,
@@ -1317,9 +1298,6 @@ body:has(#about-dialog[open]) {
   }
   .filter-note {
     padding-inline: 16px;
-  }
-  .preset-settings {
-    margin-inline: 16px;
   }
   table,
   tbody {
@@ -1378,7 +1356,7 @@ body:has(#about-dialog[open]) {
     text-align: start;
   }
   .frequency-heading {
-    padding: 0 16px 20px;
+    padding: 16px 16px 8px;
   }
   .frequency-heading > p:first-child {
     font-size: 1.625rem;

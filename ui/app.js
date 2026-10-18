@@ -340,7 +340,6 @@ function setControls() {
   $("stop").disabled = !running || busy;
   $("selected-format").disabled = running || busy || !channels.length;
   $("preferences-retry").disabled = busy || (preferencesLoadFailed && running);
-  $("total-enabled").textContent = enabled.size;
   $("bar-enabled").textContent = enabled.size;
   $("audio-state").textContent = !$("listen").checked
     ? "消音中"
@@ -367,7 +366,7 @@ function renderSelectionMode() {
   const automatic = $("auto-select").checked;
   const hint = automatic
     ? "先に始まった通話を優先します。手動で選ぶと固定します。"
-    : "手動選択を固定中。自動切替に戻すにはチェックを入れてください。";
+    : "手動選択を固定中。受信バーの「通話を自動選択」で自動切替に戻せます。";
   if ($("selection-hint").textContent !== hint)
     $("selection-hint").textContent = hint;
 }
@@ -407,7 +406,7 @@ function renderRecording() {
       failed: "保存エラー",
     }[s.state] ?? s.state;
   if ($("recording-state").textContent !== label)
-    $("recording-state").textContent = label;
+    $("recording-state").textContent = $("bar-recording").textContent = label;
   $("recording-state").classList.toggle("active", active);
   const idleMessage = recordingEnabled
     ? "受信開始後に自動で保存します。"
@@ -918,7 +917,6 @@ async function loadPresets(applyTuning = false) {
     clearError();
     for (const metric of [
       "bar-locked",
-      "total-locked",
       "total-data",
       "total-voice",
       "total-drops",
@@ -966,7 +964,7 @@ function showPresetError(error) {
     `プリセットを読み込めませんでした。${error.message ?? error} ${channels.length ? "現在のプリセットを引き続き使用します。" : "読み込むまで受信を開始できません。"} ファイルを確認して選び直してください。${presetFile ? "再読み込み、組み込みへの切替もできます。" : ""}`;
   $("preset-error").hidden = false;
   announce($("preset-error").textContent);
-  $("channels-panel").open = true;
+  $("source-panel").open = true;
   $("preset-settings").open = true;
 }
 function installCatalog(catalog, preferred) {
@@ -1119,13 +1117,16 @@ function updateSource() {
   renderRate();
   const host = $("host").value.trim();
   const port = $("port").value.trim();
-  $("source-summary").textContent = tcp
+  const source = tcp
     ? host && port
       ? `RTL-TCP · ${host.includes(":") ? `[${host}]` : host}:${port}`
       : "RTL-TCP · 接続先未設定"
     : wave
       ? "IQ WAV ファイル"
       : "SoapySDR デバイス";
+  const preset = presetCatalog.find((p) => p.id === activePresetId)?.label;
+  // The collapsed settings panel still names what will be received.
+  $("source-summary").textContent = preset ? `${preset} · ${source}` : source;
   $("source-hint").textContent = wave
     ? "I は左、Q は右のステレオ WAV。サンプルレートはファイルから取得します。"
     : tcp
@@ -1356,7 +1357,7 @@ async function poll() {
           : s.running
             ? "接続を準備しています"
             : "未接続 · 受信設定と接続先を確認してください";
-        $("total-locked").textContent = $("bar-locked").textContent = s.running
+        $("bar-locked").textContent = s.running
           ? s.channels.filter((c) => c.status.frame_locked).length
           : "—";
         $("total-data").textContent = s.channels
