@@ -1,0 +1,26 @@
+services:
+  jr-receiver:
+    build:
+      context: .
+    container_name: jr-conventional-line-radio-receiver
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    device_cgroup_rules:
+      - "c 189:* rmw"
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+      - ./data/config:/config
+      - ./data/recordings:/recordings
+    environment:
+      RUST_LOG: jr_receiver_web=info,tower_http=info
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: jr-receiver
+  category: Utilities
+  port_map: "8080"
+  title:
+    en_us: JR Conventional-line Radio Receiver

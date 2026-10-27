@@ -3,7 +3,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { JSDOM } from "jsdom";
-import { makeInput } from "../../ui/config.mjs";
+import {
+  makeInput,
+  requiredRate,
+  RATE_CANDIDATES,
+  rtlTcpRateSupported,
+} from "../../ui/config.mjs";
 import { buildCatalog } from "../../ui/presets.mjs";
 import { AudioPlayer } from "../../ui/audio.mjs";
 import { OperationMonitorView } from "../../ui/operation-monitor.mjs";
@@ -22,7 +27,7 @@ const catalog = buildCatalog(
 );
 const presets = catalog.find((p) => p.id === "east").channels;
 const defaultRecordingDirectory =
-  "/home/listener/Music/JR Cconventional-line Radio Receiver/Recordings";
+  "/home/listener/Music/JR Conventional-line Radio Receiver/Recordings";
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 function status(messages = []) {
   return {
@@ -70,6 +75,7 @@ async function setup(
   t,
   {
     native = true,
+    webRuntime = false,
     configureConnection = true,
     catalogError = null,
     recordingError = null,
@@ -129,7 +135,7 @@ async function setup(
   let snapshot = { status: status(), audio: [] };
   let recording = { state: "idle", files: 0, pcm_samples: 0, error: null };
   let closeHandler;
-  w.testDependencies = { makeInput, buildCatalog, AudioPlayer, OperationMonitorView, RoutePicker };
+  w.testDependencies = { makeInput, requiredRate, RATE_CANDIDATES, rtlTcpRateSupported, buildCatalog, AudioPlayer, OperationMonitorView, RoutePicker };
   w.structuredClone = structuredClone;
   // jsdom has no native modal behavior. Exercise our handlers, not a focus trap
   // or Escape key implementation; those belong to the browser's dialog element.
@@ -193,6 +199,7 @@ async function setup(
             if (command === "snapshot") {
               const result =
                 typeof snapshot === "function" ? await snapshot() : snapshot;
+              if (result === null) return null;
               return {
                 ...result,
                 status: {
@@ -241,6 +248,7 @@ async function setup(
         },
       }
     : undefined;
+  w.__JR_RECEIVER_WEB__ = webRuntime;
   w.fetch = async (url) => {
     assert.equal(url, "radio-presets.json");
     return {
@@ -254,7 +262,7 @@ async function setup(
     };
   };
   await w.eval(
-    `(async () => {const { makeInput, buildCatalog, AudioPlayer, OperationMonitorView, RoutePicker } = window.testDependencies;\n${source}\n})()`,
+    `(async () => {const { makeInput, requiredRate, RATE_CANDIDATES, rtlTcpRateSupported, buildCatalog, AudioPlayer, OperationMonitorView, RoutePicker } = window.testDependencies;\n${source}\n})()`,
   );
   const $ = (id) => w.document.getElementById(id);
   if (!catalogError)
@@ -318,6 +326,7 @@ test("route draft is searchable, cancelable, and only applies explicit receive t
   const ui = await setup(t);
   ui.$("channels-simple").children[0].querySelector(".channel-select").click();
   const frequency = ui.$("selected-frequency").textContent;
+  ui.$("channels-panel").open = false;
   await ui.click("route-open");
   assert.equal(ui.$("channels-panel").open, false);
   assert.equal(ui.w.document.activeElement.id, "route-search");
@@ -329,13 +338,13 @@ test("route draft is searchable, cancelable, and only applies explicit receive t
   visible[0].querySelector("input").click();
   assert.equal(ui.$("route-selected-count").textContent, "1 区間 · 4 波");
   assert.match(ui.$("route-frequencies").textContent, /352\.61250 MHz/);
-  assert.equal(ui.$("total-enabled").textContent, "22");
+  assert.equal(ui.$("bar-enabled").textContent, "22");
   ui.input("route-search", "該当なし");
   assert.equal(ui.$("route-no-results").hidden, false);
   assert.equal(ui.$("route-chosen").children.length, 1);
   ui.$("route-search").dispatchEvent(new ui.w.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
   assert.equal(ui.$("route-dialog").open, false);
-  assert.equal(ui.$("total-enabled").textContent, "22");
+  assert.equal(ui.$("bar-enabled").textContent, "22");
   assert.equal(ui.w.document.activeElement.id, "route-open");
   await ui.click("route-open");
   assert.equal(ui.$("route-chosen").children.length, 0);
@@ -343,7 +352,7 @@ test("route draft is searchable, cancelable, and only applies explicit receive t
   [...ui.$("route-results").children].find((n) => !n.hidden).querySelector("input").click();
   await ui.click("route-apply");
   assert.equal(ui.$("route-dialog").open, false);
-  assert.equal(ui.$("total-enabled").textContent, "4");
+  assert.equal(ui.$("bar-enabled").textContent, "4");
   assert.equal(ui.$("selected-frequency").textContent, frequency);
   assert.equal(ui.$("auto-select").checked, false);
   assert.equal(ui.calls.some((c) => c.command === "start"), false);
@@ -376,7 +385,7 @@ test("route selection switches company after confirmation and supports legacy ex
   await ui.click("route-apply");
   assert.equal(ui.$("region").value, "central");
   assert.equal(ui.$("center").value, "352.625000");
-  assert.equal(ui.$("total-enabled").textContent, "3");
+  assert.equal(ui.$("bar-enabled").textContent, "3");
   assert.equal(ui.calls.some((c) => c.command === "start"), false);
   await ui.click("preset-browse");
   await ui.click("route-open");
@@ -720,7 +729,7 @@ test("cancelled or invalid external files preserve the active catalog, while rel
   assert.equal(ui.$("preset-settings").open, true);
   assert.equal(ui.$("region").value, "custom-central");
   assert.equal(ui.$("center").value, "352.626");
-  assert.equal(ui.$("total-enabled").textContent, "0");
+  assert.equal(ui.$("bar-enabled").textContent, "0");
   assert.deepEqual(ui.preferences.value, saved);
   presetFiles.path = "/tmp/other-missing.json";
   await ui.click("preset-browse");
@@ -734,7 +743,7 @@ test("cancelled or invalid external files preserve the active catalog, while rel
     "更新済み <script>",
   );
   assert.equal(ui.$("region").querySelector("script"), null);
-  assert.equal(ui.$("total-enabled").textContent, "3");
+  assert.equal(ui.$("bar-enabled").textContent, "3");
   assert.equal(ui.$("center").value, "352.625000");
   assert.equal(ui.$("preset-error").hidden, true);
 });
@@ -756,7 +765,8 @@ test("missing saved catalogs block reception and can recover without losing save
   assert.equal(ui.$("region").disabled, true);
   assert.equal(ui.$("channels-simple").children.length, 0);
   assert.equal(ui.$("preset-error").hidden, false);
-  assert.equal(ui.$("channels-panel").open, true);
+  assert.equal(ui.$("source-panel").open, true);
+  assert.equal(ui.$("preset-settings").open, true);
   assert.equal(ui.$("preset-path").textContent, path);
   await ui.click("start");
   assert.equal(
@@ -818,8 +828,10 @@ test("loading locks receiving controls and a removed saved profile selects and p
 });
 test("automatic selection plays the returned channel while a manual choice pins both views", async (t) => {
   const ui = await setup(t);
-  assert.equal(ui.$("channels-panel").open, false);
-  assert.equal(ui.$("monitor-panel").open, false);
+  // Live panels start open; a listener who collapses them keeps that choice.
+  assert.equal(ui.$("channels-panel").open, true);
+  assert.equal(ui.$("monitor-panel").open, true);
+  ui.$("channels-panel").open = ui.$("monitor-panel").open = false;
   assert.equal(ui.$("auto-select").checked, true);
   ui.$("listen").checked = true;
   await ui.click("start");
@@ -1051,9 +1063,9 @@ test("about dialog shows product and author, restores focus, and leaves receptio
     ui.w.document.querySelector("footer").textContent,
     /Author|KIRISHIKI|protonmail/,
   );
-  assert.match(dialog.textContent, /JR Cconventional-line Radio Receiver/);
+  assert.match(dialog.textContent, /JR Conventional-line Radio Receiver/);
   assert.match(dialog.textContent, /JR 在来線デジタル列車無線受信アプリ/);
-  assert.match(dialog.textContent, /v1\.6\.0/);
+  assert.match(dialog.textContent, /v1\.7\.0/);
   assert.match(dialog.textContent, /KIRISHIKI Yudai/);
   assert.equal(
     dialog.querySelector("a").getAttribute("href"),
@@ -1099,6 +1111,43 @@ test("browser preview loads the same structured configuration and can switch pro
   await ui.click("about-open");
   assert.equal(ui.$("about-dialog").open, true);
   assert.equal(ui.calls.length, 0);
+});
+
+test("web browsers attach to a running server session with independent audio cursors", async (t) => {
+  const ui = await setup(t, { webRuntime: true });
+  const first = ui.calls.find((call) => call.command === "snapshot");
+  assert.ok(first, "the web page polls before starting its own session");
+  assert.equal(first.args.audio_after, null);
+  assert.equal(first.args.audio_generation, null);
+  assert.equal(ui.$("state").textContent, "受信中");
+
+  ui.setSnapshot({
+    status: status(),
+    audio_generation: 7,
+    audio: [
+      {
+        channel: presets[0].id,
+        epoch: 3,
+        index: 12,
+        pcm: [0],
+      },
+    ],
+  });
+  await ui.poll();
+  await ui.poll();
+  const latest = ui.calls.filter((call) => call.command === "snapshot").at(-1);
+  assert.equal(latest.args.audio_generation, 7);
+  assert.deepEqual(JSON.parse(JSON.stringify(latest.args.audio_after)), {
+    channel: presets[0].id,
+    epoch: 3,
+    index: 12,
+  });
+
+  ui.setSnapshot(null);
+  await ui.poll();
+  assert.equal(ui.$("state").textContent, "停止中");
+  assert.equal(ui.$("start").disabled, false);
+  assert.equal(ui.$("stop").disabled, true);
 });
 
 test("simple and detailed views share selection, receive targets, filtering and live state", async (t) => {
@@ -1398,7 +1447,10 @@ test("default source requires a user endpoint; filtering never removes active ch
   const ui = await setup(t, { configureConnection: false });
   assert.equal(ui.$("host").value, "");
   assert.equal(ui.$("port").value, "");
-  assert.equal(ui.$("source-summary").textContent, "RTL-TCP · 接続先未設定");
+  assert.equal(
+    ui.$("source-summary").textContent,
+    "JR 東日本（22波） · RTL-TCP · 接続先未設定",
+  );
   await ui.click("start");
   assert.equal(ui.w.document.activeElement.id, "host");
   assert.equal(
@@ -1413,7 +1465,10 @@ test("default source requires a user endpoint; filtering never removes active ch
     false,
   );
   ui.input("port", "1234");
-  assert.equal(ui.$("source-summary").textContent, "RTL-TCP · 127.0.0.1:1234");
+  assert.equal(
+    ui.$("source-summary").textContent,
+    "JR 東日本（22波） · RTL-TCP · 127.0.0.1:1234",
+  );
   assert.equal(
     ui.calls.some((c) => c.command === "start"),
     false,
@@ -1430,7 +1485,7 @@ test("default source requires a user endpoint; filtering never removes active ch
   assert.equal(ui.$("settings").disabled, true);
   assert.equal(ui.w.document.activeElement.id, "stop");
   await ui.poll();
-  assert.equal(ui.$("total-locked").textContent, "3");
+  assert.equal(ui.$("bar-locked").textContent, "3");
   assert.equal(ui.$("total-data").textContent, "418");
   ui.setSnapshot({
     status: { ...status(), running: false, state: "stopped" },
@@ -1686,4 +1741,113 @@ test("operation monitor selects by reception time and ignores legacy message dat
   view.update(s, { channels: s.channels.map((c) => c.config), enabled: new Set(), running: true, replay: true });
   assert.equal(app.$("operation-received-label").textContent, "最終読取日時");
   assert.equal(app.$("operation-state").textContent, "IQ再生 · 受信済み");
+});
+test("sample-rate candidates follow the input kind and explain the required bandwidth", async (t) => {
+  const ui = await setup(t);
+  const chips = () => [...ui.$("rate-presets").querySelectorAll("button")];
+  assert.deepEqual(
+    chips().map((b) => Number(b.value)),
+    [240000, 288000, 1024000, 2048000, 2400000],
+  );
+  assert.match(ui.$("rate-hint").textContent, /139,650 S\/s を超えるレート/);
+  assert.equal(ui.$("rate").getAttribute("aria-describedby"), "rate-hint");
+  chips()[2].click();
+  await tick();
+  assert.equal(ui.$("rate").value, "1024000");
+  assert.deepEqual(
+    chips().map((b) => b.getAttribute("aria-pressed")),
+    ["false", "false", "true", "false", "false"],
+  );
+  assert.equal(chips()[2].getAttribute("aria-label").startsWith("1.024M"), true);
+  ui.input("rate", "500000");
+  assert.match(ui.$("rate-hint").textContent, /RTL-TCP の対応範囲外/);
+  ui.input("rate", "240000");
+  ui.input("center", "352.70");
+  assert.match(ui.$("rate-hint").textContent, /帯域が足りません/);
+  await ui.change("input-kind", "sdr");
+  assert.deepEqual(
+    chips().map((b) => Number(b.value)),
+    [240000, 250000, 1000000, 2048000],
+  );
+  await ui.change("input-kind", "wave");
+  assert.equal(ui.$("rate-presets").hidden, true);
+  assert.equal(ui.$("rate-hint").hidden, true);
+});
+test("an invalid rate keeps its hint while pointing at the error", async (t) => {
+  const ui = await setup(t);
+  ui.input("rate", "500000");
+  await ui.click("start");
+  assert.equal(ui.$("rate").getAttribute("aria-invalid"), "true");
+  assert.equal(
+    ui.$("rate").getAttribute("aria-describedby"),
+    "field-error rate-hint",
+  );
+  ui.input("rate", "240000");
+  await ui.click("start");
+  assert.equal(ui.$("rate").getAttribute("aria-describedby"), "rate-hint");
+});
+test("session bar mirrors the selected channel, its sync state and locked count", async (t) => {
+  const ui = await setup(t);
+  const first = presets[0];
+  assert.equal(
+    ui.$("bar-frequency").textContent,
+    (first.frequency_hz / 1e6).toFixed(5),
+  );
+  assert.equal(ui.$("bar-channel-label").textContent, first.label);
+  assert.equal(ui.$("bar-enabled").textContent, String(presets.length));
+  assert.equal(ui.$("bar-locked").textContent, "—");
+  await ui.click("start");
+  await ui.poll();
+  assert.equal(ui.$("bar-locked").textContent, "3");
+  assert.equal(ui.$("bar-sync").textContent, "同期中");
+  assert.equal(ui.$("bar-sync").className, "locked");
+  ui.$("channels-simple").children[5].querySelector(".channel-select").click();
+  assert.equal(
+    ui.$("bar-frequency").textContent,
+    (presets[5].frequency_hz / 1e6).toFixed(5),
+  );
+  await ui.poll();
+  assert.equal(ui.$("bar-sync").textContent, "探索中");
+  ui.$("bar-channel").click();
+  assert.equal(ui.$("monitor-panel").open, true);
+  assert.equal(ui.$("bar-recording").textContent, "未保存");
+  await ui.click("record-start");
+  ui.setRecording({ state: "recording", files: 0, pcm_samples: 0, error: null });
+  await ui.poll();
+  assert.equal(ui.$("bar-recording").textContent, "保存中");
+  assert.equal(ui.$("bar-recording").getAttribute("href"), "#recording-title");
+});
+test("live monitoring precedes secondary sections in document order", async (t) => {
+  const ui = await setup(t);
+  const order = ["session-bar", "source-panel", "channels-panel", "monitor-panel", "operation-title", "messages-title", "recording-title"];
+  const nodes = order.map((id) => ui.$(id));
+  for (let i = 1; i < nodes.length; i++)
+    assert.equal(
+      nodes[i - 1].compareDocumentPosition(nodes[i]) & ui.w.Node.DOCUMENT_POSITION_FOLLOWING,
+      ui.w.Node.DOCUMENT_POSITION_FOLLOWING,
+      `${order[i - 1]} should precede ${order[i]}`,
+    );
+  assert.equal(ui.$("source-panel").contains(ui.$("region")), true);
+  // Listening mode controls stay reachable; manual pinning is explained in the monitor.
+  for (const id of ["listen", "auto-select"])
+    assert.equal(ui.$("session-bar").contains(ui.$(id)), true);
+  assert.equal(ui.$("monitor-panel").contains(ui.$("selection-hint")), true);
+  ui.$("channels-simple").children[2].querySelector(".channel-select").click();
+  assert.equal(ui.$("auto-select").checked, false);
+  assert.match(ui.$("selection-hint").textContent, /受信バーの「通話を自動選択」/);
+});
+test("errors reach a live region that is present before the message appears", async (t) => {
+  const ui = await setup(t, { catalogError: "設定の検証に失敗しました" });
+  assert.equal(ui.$("alert-announcer").getAttribute("role"), "alert");
+  assert.equal(ui.$("alert-announcer").hidden, false);
+  assert.match(ui.$("alert-announcer").textContent, /設定の検証に失敗しました/);
+  assert.equal(ui.$("error").hasAttribute("role"), false);
+});
+test("route dialog errors are announced inside the modal", async (t) => {
+  const ui = await setup(t);
+  await ui.click("route-open");
+  await ui.click("route-apply");
+  assert.equal(ui.$("route-dialog").contains(ui.$("route-announcer")), true);
+  await new Promise((resolve) => setTimeout(resolve, 60));
+  assert.match(ui.$("route-announcer").textContent, /1つ以上選択/);
 });

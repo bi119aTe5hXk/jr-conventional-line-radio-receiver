@@ -1,8 +1,8 @@
-# JR Cconventional-line Radio Receiver
+# JR Conventional-line Radio Receiver
 
 English | [日本語](README.ja.md)
 
-Version: **v1.6.0**
+Version: **v1.7.0**
 
 Author: KIRISHIKI Yudai <yudai.kirishiki@protonmail.com>
 
@@ -29,7 +29,7 @@ cargo run --release -p jr-receiver-desktop
 
 Use `--release` for reception. The repository includes `Cargo.lock`.
 GitHub Actions builds GUI and CLI binaries for Linux x86_64, Windows x64, and macOS Apple Silicon / Intel.
-Manual workflow runs only generate artifacts. Pushing a tag that matches the product version, such as `v1.6.0`, also publishes a GitHub Release.
+Manual workflow runs only generate artifacts. Pushing a tag that matches the product version, such as `v1.7.0`, also publishes a GitHub Release.
 Windows archives include the SoapySDR DLL; Linux and macOS use the system's SoapySDR 0.8 installation.
 See the [release guide](docs/RELEASE.md) for build instructions, runtime dependencies, CI, and publishing.
 Local build and startup checks have been performed on Linux only. Installers, publisher signatures, and notarization are not provided.
@@ -39,26 +39,28 @@ Local build and startup checks have been performed on Linux only. Installers, pu
 [`ui/radio-presets.json`](ui/radio-presets.json) uses a custom JSON structure that separates channel definitions from receive profiles.
 The GUI and CLI share these built-in presets.
 The desktop app can also load external JSON files with the same structure, without rebuilding.
-While reception is stopped, open “チャンネル一覧” (Channels) → “プリセットファイル” (Preset file) → “JSON ファイルを選択” (Select JSON file).
+While reception is stopped, open “受信設定” (Receive settings) → “プリセットファイル” (Preset file) → “JSON ファイルを選択” (Select JSON file).
 Use “再読み込み” (Reload) to apply edits, or “組み込みに戻す” (Restore built-in presets) to return to the three default operator profiles.
 
 1. Choose an input source. For RTL-TCP, enter the server's **IP address and port**; both are initially empty.
    For local hardware, choose “SoapySDR デバイス” (SoapySDR device) and use “検索” (Find) to select a device.
    Advanced settings accept SoapySDR arguments, an RX channel index, and an antenna name.
-2. Choose a receive profile and check the channels to receive. The default is the 22 channels allocated to JR East.
+2. Choose a receive profile in “受信設定” (Receive settings) and check the channels to receive in the channel list. The default is the 22 channels allocated to JR East.
    Alternatively, select **“路線から選ぶ” (Choose by line)** above the collapsed channel list. Search by line, section endpoint, or D number, select one or more sections, review their frequencies, then apply. Reception starts only when you select “受信を開始”. See [route selection and external route metadata](docs/ROUTES.md).
    The three built-in profiles cover JR East (22 channels), JR Central (3 channels), and JR West (19 channels), with only each operator's allocated frequencies.
    The default “簡易” (Compact) view shows frequency, allocation, and synchronization status in tiles that adapt to the window width.
    “詳細” (Detailed) shows the format and voice/data counts in a table. Switching views does not affect reception, recording, the selected channel, or search filters.
 3. The initial center frequency is **352.603125 MHz**, with a requested sample rate of **240,000 S/s**.
-   Choose a different rate if required by your hardware. SoapySDR validates bandwidth using the sample rate and center frequency read back from the device.
+   Choose a different rate if required by your hardware. The “サンプルレートの候補” (Sample-rate candidates) buttons below the fields set common values: 240k, 288k, 1.024M, 2.048M, and 2.4M for RTL-TCP, and 240k, 250k, 1M, and 2.048M for SoapySDR.
+   Below them, the app shows the RTL-TCP supported ranges and the rate needed to demodulate every enabled channel at the current center frequency, leading with a warning when the rate is too low or out of range. Starting reception still validates the value in the field.
+   SoapySDR validates bandwidth using the sample rate and center frequency read back from the device.
    RTL-TCP does not support reading settings back, so the app displays and uses the requested values.
    Changing profiles selects the corresponding center frequency and recommended rate: **352.603125 MHz** for JR East / West,
    **352.625000 MHz** for JR Central, and **240 kS/s** for all three.
    Changing profiles does not alter the center frequency entered for IQ WAV input.
 4. Select “受信を開始” (Start reception) to process all checked channels. Launching the app does not connect to a server.
    Select a frequency button to view synchronization status, EVM, the constellation, and decoded data.
-5. Enable “音声を聴く” (Listen to audio) to play the selected channel. **“通話を自動選択” (Automatically select calls)** is enabled by default.
+5. Enable “音声を聴く” (Listen to audio) to play the selected channel. **“通話を自動選択” (Automatically select calls)** is enabled by default. Both checkboxes sit in the session bar, so they stay reachable while scrolling.
    If calls overlap, the earliest-started call takes priority. When it ends, the app selects the earliest-started call that is still active.
    **Selecting a frequency manually pins that channel.** Enable automatic selection again to resume switching.
    All other channels continue decoding and synthesizing voice. Speaker output plays one selected channel at a time.
@@ -76,9 +78,14 @@ Allow additional margin for the hardware's usable bandwidth and anti-aliasing ch
 If a device does not support the default 240 kS/s, choose a supported higher rate, such as 1.024 MS/s.
 Hardware support depends on the available [SoapySDR drivers](https://github.com/pothosware/SoapySDR/wiki).
 
-The overview shows the number of enabled and synchronized channels, valid data messages, voice frames, and dropped processing blocks.
+The page puts what matters during reception first. From the top: the session bar, reception totals, receive settings, the channel list and selected-channel monitor, the operation monitor and received data, then recording and data output.
+
+The session bar below the title holds the reception state, “受信を開始” (Start) and “停止” (Stop), the selected channel (frequency, allocation, and sync state), the synchronized count, the save state, “音声を聴く” (Listen), and “通話を自動選択” (Automatically select calls). The save state links to the recording and data output section.
+On screens taller than 36rem and wider than 36rem it stays pinned to the top while scrolling, and anchored or focused targets are offset so the bar never covers them. The selected channel links to the selected-channel monitor. Narrow windows omit the allocation name in the bar.
+Below it, one quiet line shows the band and cumulative valid data messages, voice frames, and dropped processing blocks. The enabled and synchronized counts live in the session bar.
+“受信設定” (Receive settings) is open while stopped and closes automatically when reception starts. Its header still names the receive profile and the input source or endpoint. The receive profile and preset file controls are inside it.
 Search only filters the visible list; it does not change which channels are received.
-The channel list and selected-channel monitor start collapsed. Open their headers when you need channel selection, reception diagnostics, or playback settings; closing them keeps reception, audio, and data updates running. The operation monitor and received data appear side by side on wide screens, with navigation links above them. Audio on/off stays visible, and the received-data panel shows its selected frequency and a link to open the channel list. Preset errors and channel-selection validation reveal the relevant controls automatically.
+The channel list and selected-channel monitor start open. The monitor leads with the frequency and allocation, followed by automatic call selection, reception diagnostics, and playback settings. Select a header to collapse a panel; closing it keeps reception, audio, and data updates running. The operation monitor and received data appear side by side on wide screens, with navigation links above them, including one to recording and data output. Audio on/off stays available in the session bar, and the received-data panel shows its selected frequency and a link to open the channel list. Preset errors and channel-selection validation reveal the relevant controls automatically.
 “更新を一時停止” (Pause updates) freezes the selected channel’s message log while decoding and the operation monitor continue. On narrow screens, the detailed list becomes cards.
 
 “運行把握モニタ” (Operation monitor), below the channel list, shows line-level delay counts, trains on the line, three delay classes, maximum delay, and its train number from supported JR East common-wave messages. Enable the common channel with the “一斉” format. The table updates independently of audio selection, saving, and the message-log pause. Narrow layouts show each line as a labeled record; missing values say “不明” (Unknown), rather than zero.
@@ -139,9 +146,10 @@ Once the receiver shows “受信中” (Receiving), select **“保存を開始
 This enables saving for subsequent receive sessions, including after restarting the app. Stopping reception, reaching EOF, or closing the app keeps that choice. “保存を停止” (Stop saving), or “保存を無効にする” (Disable saving) while idle, disables it persistently. Existing settings without this preference default to disabled. A failed automatic start displays an error without repeatedly retrying or stopping reception.
 The “保存内容・保存先” (Output formats and destination) section is collapsed initially. Expand it to choose WAV, raw-frame JSONL, data-message JSONL, and the output directory, or to view the saved session folder.
 Formats can be selected independently, including JSONL-only output. Stop saving before changing them.
-Status and start/stop controls remain visible. An error expands the settings, and its message remains visible if they are collapsed again.
+The section sits at the end of the page; the session bar also shows the save state and links to it. Its status and start/stop controls remain visible. An error expands the settings, and its message remains visible if they are collapsed again.
 
-The default output directory is `JR Cconventional-line Radio Receiver/Recordings` inside the operating system's Music folder.
+The default output directory is `JR Conventional-line Radio Receiver/Recordings` inside the operating system's Music folder.
+Earlier versions defaulted to the misspelled `JR Cconventional-line Radio Receiver/Recordings`. The output directory is stored in the settings, so settings carried over from an earlier version keep using that folder.
 The app uses the known Music folder on Windows, `~/Music` on macOS, and `XDG_MUSIC_DIR` on Linux, falling back to `~/Music` if the OS location cannot be determined.
 The default directory is created when recording starts if it does not exist. You can also select or enter another existing directory.
 If the default cannot be resolved or created, the recording section displays an error and lets you choose another destination.
@@ -231,13 +239,48 @@ You can also build file decoding and RTL-TCP input without SoapySDR:
 cargo run --release -p jr-receiver --no-default-features -- --help
 ```
 
+### Demodulator evaluation (synthetic signals, development tool)
+
+The development tool `jr-demod-eval` (`crates/demod-eval`) measures demodulator performance without recordings. It is not part of the product (the desktop app and `jr-receiver`) or its releases. The receiver core builds its frame encoders only with the `synthesis` feature, which this tool enables. It encodes voice frames with random payloads, modulates them as pi/4-DQPSK (4,800 symbols/s, root raised cosine with 0.2 roll-off), passes them through a synthetic channel, and receives them with the production DSP, frame synchronizer, and voice decoder.
+The channel is a tapped delay line with per-path delay, power and carrier offset (`--paths DELAY_US:POWER_DB[:OFFSET_HZ]`), maximum Doppler shift (0 is static), an optional Rician K factor for the first path, carrier offset, and white Gaussian noise. Fading uses a Clarke-model sum of sinusoids normalized to unit average power. Es/N0 refers to the average received power.
+
+```sh
+# Static two-path (52 µs) channel, and 40 Hz Rayleigh fading (about 120 km/h)
+cargo run --release -p jr-demod-eval -- \
+  --es-n0 10,14,18,22,26,30 --paths 0:0,52:0 --frames 400 --seeds 3
+cargo run --release -p jr-demod-eval -- \
+  --es-n0 10,14,18,22,26,30 --doppler 40 --frames 400 --seeds 3
+```
+
+A per-Es/N0 summary goes to standard error and JSON to standard output. The main fields are:
+
+| Field | Meaning |
+| --- | --- |
+| `symbol_error_rate` / `bit_error_rate` | Differential symbol and bit error rates before FEC, aligned with the transmission block by block. Blocks that cannot be aligned count as `symbols_unaligned` |
+| `voice_acceptance` | Fraction of transmitted voice frames whose protected bits were accepted correctly |
+| `voice_false` | Accepted frames whose protected bits match nothing transmitted (undetected errors) |
+| `alternate_accepted` | Frames accepted only because the alternate (RLS) detector's frame decoded. `--single` disables the alternate for comparison |
+| `clock_slips` | Symbols the receiver inserted or dropped (clock slips), counted from alignment changes between blocks |
+| `data_accepted` / `data_false` | With `--traffic data`, data frames whose 28 information bytes were recovered exactly, and frames accepted with content never transmitted |
+| `unprotected_bit_errors` | Errors in the 80 payload bits the radio format leaves unprotected, over accepted frames |
+| `fade_bins` | Compared symbols and errors by instantaneous channel power relative to its average at each symbol centre, split at −20 / −10 / −5 / 0 dB. Separates errors confined to fades (noise-limited) from errors that persist in strong signal (tracking-limited) |
+
+Per-path offsets model several base stations transmitting the same channel at once: their slightly different carriers beat, and their transmissions are offset in time. For example, `--paths 0:0,208:0:5` is two equal-power stations, the second one symbol later and 5 Hz off.
+`--traffic data` sends data frames (RS(42,30) and CRC-16). `--hard` decodes without the soft reliabilities, so the soft-decision gain can be compared in one build.
+`--receiver differential` is a reference detector for comparison: a matched filter at the known symbol timing followed by differential detection. It needs no tracking, so it indicates what a non-coherent detector achieves on the same channel. It is not used for reception.
+The first three frames train acquisition and are excluded. Results are reproducible per seed.
+
 ## Implementation and validation
 
-- `crates/jr-conventional-dsp`: DSP for frequency translation, filtering, timing/carrier synchronization, and equalization.
-- [`crates/jr-voice`](crates/jr-voice/README.md): pure Rust CELP synthesis, version 1.2.0. The decoder compares current-frame and next-frame synthesis candidates with 160 ms total lookahead. Fixed model coefficients are compiled into the executable.
+- `crates/jr-conventional-dsp`: DSP for frequency translation, filtering, timing/carrier synchronization, and equalization. There are two sequence detectors: the primary tracks the channel with LMS (low noise, for static or low-SNR reception), and the alternate uses RLS on each tap and its rate of change (a constant-velocity model) to follow fast time-varying channels, such as a train moving through an area where several base stations transmit the same channel at once. The alternate has its own carrier loop, and both emit decisions at the same latency. Besides hard decisions, each emits a reliability per bit (soft decisions), derived from the differential product of ISI-cancelled observations weighted by the channel estimate, so it shrinks in fades and is zero where the signal was lost.
+- [`crates/jr-voice`](crates/jr-voice/README.md): pure Rust CELP synthesis, version 1.3.0. The decoder compares current-frame and next-frame synthesis candidates with seven frames (280 ms) of total lookahead. Fixed model coefficients are compiled into the executable.
 - `crates/receiver-core`: synchronization, voice-channel decoding, RS / CRC, data assembly, LH5, Japanese/English text, SoapySDR / RTL-TCP, and concurrent receive workers.
+  Both decision streams are frame-synchronized separately, and frames covering the same span (starts less than half a frame apart) are paired: the primary frame is used if it decodes as voice or data, otherwise the alternate frame if it does. Chosen frames are placed on the 384-bit grid, and `alternate_frames` in the status counts alternate picks. Running both detectors roughly doubles per-channel CPU load.
+  Frame synchronization checks the marker opening each 128-bit segment and realigns a segment by one symbol when a timing slip has inserted or dropped a symbol. Instead of losing lock and spending three frames to reacquire, it keeps the remaining segments and the following frames. Reported bit offsets stay on the 384-bit grid.
+  Frames the hard-decision decoders reject are decoded again with the reliabilities: soft-decision Viterbi decoding for voice with errors-and-erasures repair of its Reed–Solomon tail (up to six least reliable bytes erased), and RS(42,30) decoding with up to eight least reliable bytes erased for data. Acceptance still requires the CRCs and, for voice, a matching CRC-16/RS tail.
 - `src-tauri` / `ui`: Japanese GUI, reception controls, and Web Audio playback of the selected channel.
 - `crates/receiver-cli`: device enumeration, RTL-TCP monitoring, and IQ / frame-file decoding.
+- `crates/demod-eval`: development tool for demodulator evaluation with synthetic signals and channels; not part of the product or its releases.
 
 IQ is acquired once and distributed through reference-counted buffers to bounded per-channel queues.
 Each channel has its own DSP, synchronization, voice, and data state and runs on a separate thread.
