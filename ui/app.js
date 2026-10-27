@@ -1346,7 +1346,7 @@ async function poll() {
           `中心 ${$("center").value} MHz · 設定は停止中に変更できます`;
         $("progress").textContent = "";
         for (const metric of [
-          "total-locked",
+          "bar-locked",
           "total-data",
           "total-voice",
           "total-drops",
