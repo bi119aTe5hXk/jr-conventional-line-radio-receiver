@@ -8,7 +8,7 @@
       content="KIRISHIKI Yudai &lt;yudai.kirishiki@protonmail.com&gt;"
     />
     <title>
-      JR Cconventional-line Radio Receiver (JR 在来線デジタル列車無線受信アプリ)
+      JR Conventional-line Radio Receiver (JR 在来線デジタル列車無線受信アプリ)
     </title>
     <link rel="stylesheet" href="style.css" />
     <link rel="icon" type="image/png" href="assets/app-icon.png" />
@@ -27,42 +27,74 @@
           alt=""
         />
         <div>
-          <p class="eyebrow">JR Cconventional-line Radio Receiver</p>
+          <p class="eyebrow">JR Conventional-line Radio Receiver</p>
           <h1>JR 在来線デジタル列車無線受信アプリ</h1>
         </div>
       </div>
-      <div class="session">
-        <span id="state" class="badge" role="status">停止中</span
-        ><button id="start" class="primary" disabled>
-          <span aria-hidden="true">▶</span> 受信を開始</button
-        ><button id="stop" disabled>
-          <span aria-hidden="true">■</span> 停止
-        </button>
-      </div>
     </header>
+    <div id="session-bar" class="session-bar" role="region" aria-label="受信の操作と状態">
+      <div class="session-bar-inner">
+        <div class="session">
+          <span id="state" class="badge" role="status">停止中</span
+          ><button id="start" class="primary" disabled>
+            <span aria-hidden="true">▶</span> 受信を開始</button
+          ><button id="stop" disabled>
+            <span aria-hidden="true">■</span> 停止
+          </button>
+        </div>
+        <dl class="session-facts">
+          <div>
+            <dt>選択波</dt>
+            <dd>
+              <a id="bar-channel" href="#monitor-title"
+                ><bdi id="bar-frequency">—</bdi> <span class="unit">MHz</span>
+                <span id="bar-channel-label" class="session-channel-label"></span
+              ></a>
+              <span id="bar-sync" class="lost">待機</span>
+            </dd>
+          </div>
+          <div>
+            <dt>同期</dt>
+            <dd><span id="bar-locked">—</span> / <span id="bar-enabled">22</span> 波</dd>
+          </div>
+          <div>
+            <dt>保存</dt>
+            <dd><a id="bar-recording" href="#recording-title">未保存</a></dd>
+          </div>
+        </dl>
+        <div class="listening-control" role="group" aria-label="音声">
+          <label class="check-label listen" for="listen"
+            ><input id="listen" type="checkbox" checked />音声を聴く</label
+          ><label class="check-label" for="auto-select"
+            ><input
+              id="auto-select"
+              type="checkbox"
+              checked
+              aria-describedby="selection-hint"
+            />通話を自動選択</label
+          >
+          <span id="audio-state" class="muted">音声待機</span>
+        </div>
+      </div>
+    </div>
     <main>
-      <div id="error" class="error" role="alert" hidden></div>
+      <p id="alert-announcer" class="sr-only" role="alert"></p>
+      <div id="error" class="error" hidden></div>
       <div id="preferences-error" class="error" hidden>
-        <p id="preferences-message" role="alert"></p>
+        <p id="preferences-message"></p>
         <button id="preferences-retry" type="button">保存を再試行</button>
       </div>
       <section class="overview" aria-label="受信全体の状態">
-        <div class="overview-intro">
-          <p class="eyebrow">受信帯域</p>
-          <p class="band-range">
-            <bdi id="band-low">352.53750</bdi><span>–</span
-            ><bdi id="band-high">352.66875</bdi> <small>MHz</small>
-          </p>
-          <p id="band-note">22 波 · 音声とデータを並列復号</p>
-        </div>
         <dl class="totals">
-          <div>
-            <dt>受信対象</dt>
-            <dd><span id="total-enabled">22</span><small>波</small></dd>
-          </div>
-          <div>
-            <dt>現在の同期</dt>
-            <dd><span id="total-locked">—</span><small>波</small></dd>
+          <div class="band">
+            <dt>受信帯域</dt>
+            <dd>
+              <span class="band-range"
+                ><bdi id="band-low">352.53750</bdi><span>–</span
+                ><bdi id="band-high">352.66875</bdi> <small>MHz</small></span
+              >
+              <span id="band-note">22 波 · 音声とデータを並列復号</span>
+            </dd>
           </div>
           <div>
             <dt>有効データ</dt>
@@ -86,6 +118,39 @@
         </summary>
         <fieldset id="settings">
           <legend class="sr-only">受信設定</legend>
+          <div class="preset-row">
+            <label class="region" for="region"
+              >受信プリセット<select id="region" disabled>
+                <option value="east">受信設定を読み込み中</option>
+              </select></label
+            >
+            <details id="preset-settings" class="preset-settings">
+              <summary>
+                プリセットファイル · <span id="preset-source">組み込み</span>
+              </summary>
+              <p id="preset-path" dir="auto" hidden></p>
+              <div class="preset-actions">
+                <button id="preset-browse" type="button">
+                  JSON ファイルを選択
+                </button>
+                <button id="preset-reload" type="button" disabled>
+                  再読み込み
+                </button>
+                <button id="preset-builtin" type="button" disabled>
+                  組み込みに戻す
+                </button>
+              </div>
+              <p>
+                停止中に変更できます。選択したファイルは次回起動時にも読み込みます。
+              </p>
+            </details>
+          </div>
+          <p id="preset-status" class="preset-feedback" role="status"></p>
+          <p
+            id="preset-error"
+            class="preset-feedback field-error"
+            hidden
+          ></p>
           <div class="source-grid">
             <label for="input-kind"
               >入力方式<select id="input-kind">
@@ -151,6 +216,8 @@
                 step="1"
                 inputmode="numeric"
                 required
+                aria-describedby="rate-hint"
+                data-hint="rate-hint"
             /></label>
             <label for="gain"
               >ゲイン <span class="unit">dB</span
@@ -162,6 +229,17 @@
                 inputmode="decimal"
             /></label>
           </div>
+          <div
+            id="rate-presets"
+            class="rate-presets"
+            role="group"
+            aria-labelledby="rate-presets-label"
+          >
+            <span id="rate-presets-label" class="rate-presets-label"
+              >サンプルレートの候補</span
+            >
+          </div>
+          <p id="rate-hint" class="field-hint"></p>
           <p id="source-hint" class="field-hint">
             240,000 S/s で全 22 波をカバー。接続は「受信を開始」で行います。
           </p>
@@ -205,124 +283,22 @@
           ><span id="progress"></span>
         </div>
       </details>
-      <section class="card recording" aria-labelledby="recording-title">
-        <div class="recording-bar">
-          <div class="recording-heading">
-            <h2 id="recording-title">録音・データ保存</h2>
-            <span id="recording-state" class="badge" role="status">未保存</span>
-          </div>
-          <div class="recording-actions">
-            <button id="record-start" type="button" disabled>保存を開始</button>
-            <button id="record-stop" type="button" disabled>保存を停止</button>
-          </div>
-        </div>
-        <details id="recording-settings">
-          <summary>保存内容・保存先</summary>
-          <p id="recording-hint" class="recording-hint">
-            受信対象の全チャンネルを保存します。消音やチャンネル選択は保存に影響しません。
-            WAV は周波数別、JSONL はチャンネル情報付きで保存します。
-            保存の有効・無効、保存先、保存内容は次回起動時も引き継がれます。
-          </p>
-          <fieldset id="output-options" class="output-options">
-            <legend>保存する内容</legend>
-            <label class="check-label"
-              ><input
-                id="output-audio"
-                type="checkbox"
-                checked
-              />音声通話（WAV）</label
-            >
-            <label class="check-label"
-              ><input
-                id="output-raw"
-                type="checkbox"
-              />生フレーム（JSONL）</label
-            >
-            <label class="check-label"
-              ><input
-                id="output-data"
-                type="checkbox"
-              />データ電文（JSONL）</label
-            >
-          </fieldset>
-          <div class="recording-controls">
-            <label for="record-directory"
-              >保存先フォルダー
-              <input
-                id="record-directory"
-                type="text"
-                placeholder="保存先を選択してください"
-                spellcheck="false"
-                autocomplete="off"
-                aria-describedby="recording-hint"
-              />
-            </label>
-            <button id="record-browse" type="button">フォルダーを選択</button>
-          </div>
-          <div class="recording-info">
-            <p id="recording-summary">
-              受信を開始してから保存できます。8 kHz・16 bit・モノラル。
-            </p>
-            <p id="recording-output" hidden></p>
-          </div>
-        </details>
-        <p id="recording-error" class="field-error" role="alert" hidden></p>
-      </section>
       <div class="workspace-navigation">
         <nav aria-label="受信情報への移動">
           <button id="route-open" type="button" disabled aria-haspopup="dialog">路線から選ぶ</button>
           <a href="#operation-title">運行把握モニタ</a>
           <a href="#messages-title">受信データ</a>
+          <a href="#recording-title">録音・データ保存</a>
         </nav>
-        <div class="listening-control">
-          <label class="check-label listen" for="listen"
-            ><input id="listen" type="checkbox" checked />音声を聴く</label
-          >
-          <span id="audio-state" class="muted">音声待機</span>
-        </div>
       </div>
       <p id="route-feedback" class="route-feedback" role="status"></p>
       <div class="workspace">
         <div class="workspace-tools">
-          <details id="channels-panel" class="card channels panel-disclosure">
+          <details id="channels-panel" class="card channels panel-disclosure" open>
             <summary id="channels-title" class="panel-summary">
               <h2>チャンネル一覧</h2>
-              <span id="channel-count" class="panel-summary-meta">22 波を選択 · 待機</span>
+              <span id="channel-count" class="panel-summary-meta">受信対象 22 波 · 待機</span>
             </summary>
-            <div class="section-title">
-              <label class="region" for="region"
-                >受信プリセット<select id="region" disabled>
-                  <option value="east">受信設定を読み込み中</option>
-                </select></label
-              >
-            </div>
-            <details id="preset-settings" class="preset-settings">
-              <summary>
-                プリセットファイル · <span id="preset-source">組み込み</span>
-              </summary>
-              <p id="preset-path" dir="auto" hidden></p>
-              <div class="preset-actions">
-                <button id="preset-browse" type="button">
-                  JSON ファイルを選択
-                </button>
-                <button id="preset-reload" type="button" disabled>
-                  再読み込み
-                </button>
-                <button id="preset-builtin" type="button" disabled>
-                  組み込みに戻す
-                </button>
-              </div>
-              <p>
-                停止中に変更できます。選択したファイルは次回起動時にも読み込みます。
-              </p>
-            </details>
-            <p id="preset-status" class="preset-feedback" role="status"></p>
-            <p
-              id="preset-error"
-              class="preset-feedback field-error"
-              role="alert"
-              hidden
-            ></p>
             <div class="channel-toolbar">
               <label for="channel-search" class="search-label"
                 ><span class="sr-only">周波数・割当を検索</span
@@ -393,30 +369,22 @@
               割当情報を読み込み中です。件数は受信開始からの累計です。
             </div>
           </details>
-          <details id="monitor-panel" class="card monitor panel-disclosure">
+          <details id="monitor-panel" class="card monitor panel-disclosure" open>
             <summary id="monitor-title" class="panel-summary">
               <h2>選択波モニタ</h2>
               <span id="monitor-summary" class="panel-summary-meta">選択波を読み込み中</span>
             </summary>
-            <div class="monitor-selection">
-              <label class="check-label" for="auto-select"
-                ><input
-                  id="auto-select"
-                  type="checkbox"
-                  checked
-                  aria-describedby="selection-hint"
-                />通話を自動選択</label
-              >
-              <p id="selection-hint" role="status">
-                先に始まった通話を優先します。手動で選ぶと固定します。
-              </p>
-            </div>
             <div class="frequency-heading">
               <p>
                 <span id="selected-frequency">352.53750</span>
                 <span class="unit">MHz</span>
               </p>
               <p id="selected-label">D5 音声第1波</p>
+            </div>
+            <div class="monitor-selection">
+              <p id="selection-hint" role="status">
+                先に始まった通話を優先します。手動で選ぶと固定します。
+              </p>
             </div>
             <div class="monitor-grid">
               <dl class="stats">
@@ -488,7 +456,7 @@
               <p class="field-hint">受信を停止してから変更できます。</p>
             </details>
             <p class="hint" id="monitor-note">
-              音声とデータは全受信チャンネルで復号します。選択中の波の音声を再生します。
+              音声とデータは全受信チャンネルで復号します。選択波の音声を再生します。
             </p>
           </details>
         </div>
@@ -543,10 +511,74 @@
           <div id="messages"></div>
         </section>
       </div>
+      <section class="card recording" aria-labelledby="recording-title">
+        <div class="recording-bar">
+          <div class="recording-heading">
+            <h2 id="recording-title" tabindex="-1">録音・データ保存</h2>
+            <span id="recording-state" class="badge" role="status">未保存</span>
+          </div>
+          <div class="recording-actions">
+            <button id="record-start" type="button" disabled>保存を開始</button>
+            <button id="record-stop" type="button" disabled>保存を停止</button>
+          </div>
+        </div>
+        <details id="recording-settings">
+          <summary>保存内容・保存先</summary>
+          <p id="recording-hint" class="recording-hint">
+            受信対象の全チャンネルを保存します。消音や選択波の切り替えは保存に影響しません。
+            WAV は周波数別、JSONL はチャンネル情報付きで保存します。
+            保存の有効・無効、保存先、保存内容は次回起動時も引き継がれます。
+          </p>
+          <fieldset id="output-options" class="output-options">
+            <legend>保存する内容</legend>
+            <label class="check-label"
+              ><input
+                id="output-audio"
+                type="checkbox"
+                checked
+              />音声通話（WAV）</label
+            >
+            <label class="check-label"
+              ><input
+                id="output-raw"
+                type="checkbox"
+              />生フレーム（JSONL）</label
+            >
+            <label class="check-label"
+              ><input
+                id="output-data"
+                type="checkbox"
+              />データ電文（JSONL）</label
+            >
+          </fieldset>
+          <div class="recording-controls">
+            <label for="record-directory"
+              >保存先フォルダー
+              <input
+                id="record-directory"
+                type="text"
+                placeholder="保存先を選択してください"
+                spellcheck="false"
+                autocomplete="off"
+                aria-describedby="recording-hint"
+                data-hint="recording-hint"
+              />
+            </label>
+            <button id="record-browse" type="button">フォルダーを選択</button>
+          </div>
+          <div class="recording-info">
+            <p id="recording-summary">
+              受信を開始してから保存できます。8 kHz・16 bit・モノラル。
+            </p>
+            <p id="recording-output" hidden></p>
+          </div>
+        </details>
+        <p id="recording-error" class="field-error" hidden></p>
+      </section>
       <footer>
         <span
-          >JR Cconventional-line Radio Receiver
-          <span class="version">v1.6.0</span></span
+          >JR Conventional-line Radio Receiver
+          <span class="version">v1.7.0</span></span
         >
         <button
           id="about-open"
@@ -569,14 +601,14 @@
         <h2 id="about-title">バージョン情報</h2>
       </div>
       <p id="about-product" class="about-product">
-        JR Cconventional-line Radio Receiver
+        JR Conventional-line Radio Receiver
       </p>
       <p id="about-description" class="muted">
         JR 在来線デジタル列車無線受信アプリ
       </p>
       <dl class="about-metadata">
         <dt>バージョン</dt>
-        <dd>v1.6.0</dd>
+        <dd>v1.7.0</dd>
         <dt>Author</dt>
         <dd class="about-author">
           <span>KIRISHIKI Yudai</span>
@@ -623,7 +655,8 @@
         <div class="route-actions">
           <p id="route-effect"></p>
           <p id="route-locked" class="field-hint" hidden>受信中・処理中は参照のみできます。受信を停止してから適用してください。</p>
-          <p id="route-error" class="field-error" role="alert" hidden></p>
+          <p id="route-error" class="field-error" hidden></p>
+          <p id="route-announcer" class="sr-only" role="alert"></p>
           <div><button id="route-cancel" type="button">キャンセル</button><button id="route-apply" type="button" class="primary">受信対象に適用</button></div>
         </div>
       </div>

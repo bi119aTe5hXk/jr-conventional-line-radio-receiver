@@ -48,6 +48,9 @@
 * {
   box-sizing: border-box;
 }
+html {
+  scroll-padding-block-start: var(--session-bar-height, 0px);
+}
 body {
   margin: 0;
   background: var(--bg);
@@ -168,7 +171,7 @@ small,
   color: var(--muted);
   font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   margin-block-end: 4px;
 }
@@ -180,7 +183,6 @@ small,
   justify-content: space-between;
   gap: 24px;
   align-items: center;
-  border-block-end: 1px solid var(--line);
 }
 .brand {
   display: flex;
@@ -190,6 +192,7 @@ small,
 }
 .brand .eyebrow {
   text-transform: none;
+  letter-spacing: 0;
 }
 .brand-icon {
   display: block;
@@ -204,7 +207,70 @@ small,
   align-items: center;
   flex-wrap: wrap;
 }
+/* Session controls and live state stay reachable while monitoring. */
+.session-bar {
+  background: var(--bg);
+  border-block-end: 1px solid var(--line);
+  z-index: 10;
+}
+.session-bar-inner {
+  max-width: 1800px;
+  margin-inline: auto;
+  padding: 10px 32px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 32px;
+}
+.session-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+  flex: 1 1 18rem;
+  min-width: 0;
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+.session-facts > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.session-facts dt {
+  color: var(--muted);
+  white-space: nowrap;
+}
+.session-facts dd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+#bar-channel {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px;
+  min-height: 24px;
+  min-width: 0;
+}
+#bar-frequency {
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-body);
+}
+.session-channel-label {
+  overflow-wrap: anywhere;
+}
+@media (min-width: 36.01rem) and (min-height: 36rem) {
+  .session-bar {
+    position: sticky;
+    top: 0;
+  }
+}
 .badge {
+  font-variant-numeric: tabular-nums;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -231,48 +297,45 @@ main {
   margin-inline: auto;
   padding: 0 32px 24px;
 }
+/* Aggregate counters are context, not the task: one quiet line. */
 .overview {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 32px;
-  padding-block: 28px;
-}
-.overview-intro > p:last-child {
-  font-size: var(--text-caption);
-  color: var(--muted);
-  margin-block-start: 6px;
-}
-.band-range {
-  font-family: ui-monospace, monospace;
-  font-size: 1.125rem;
-  font-variant-numeric: tabular-nums;
-}
-.band-range span {
-  color: var(--muted);
-  margin-inline: 6px;
+  padding-block: 12px;
 }
 .totals {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 24px;
-  flex: 1;
-  max-width: 760px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 28px;
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+.totals > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
 }
 .totals dt {
   color: var(--muted);
-  font-size: var(--text-caption);
   white-space: nowrap;
 }
 .totals dd {
-  font-size: 1.75rem;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  margin-block-start: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
-.totals small {
-  margin-inline-start: 5px;
+.band-range {
+  font-family: ui-monospace, monospace;
+}
+.band-range span {
+  color: var(--muted);
+  margin-inline: 4px;
+}
+#band-note {
+  color: var(--muted);
 }
 .card {
   background: var(--surface);
@@ -322,6 +385,29 @@ fieldset {
   display: grid;
   grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
   gap: 12px;
+}
+.rate-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-block-start: 12px;
+}
+.rate-presets-label {
+  color: var(--muted);
+  font-size: var(--text-caption);
+  margin-inline-end: 6px;
+}
+.rate-presets button {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+.rate-presets button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--selected);
+  color: var(--accent);
 }
 #device-group,
 .file-row {
@@ -373,6 +459,7 @@ fieldset {
   flex-wrap: wrap;
   color: var(--muted);
   font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
 }
 .workspace {
   display: grid;
@@ -401,7 +488,7 @@ fieldset {
   padding-block: 8px;
 }
 .listening-control {
-  gap: 8px 12px;
+  gap: 0 20px;
   font-size: var(--text-caption);
 }
 .workspace-tools {
@@ -417,7 +504,7 @@ fieldset {
 }
 .panel-summary h2 {
   display: inline;
-  font-size: var(--text-body);
+  font-size: var(--text-heading);
 }
 .panel-summary-meta {
   display: block;
@@ -458,14 +545,25 @@ fieldset {
 .section-title p:not(.eyebrow) {
   color: var(--muted);
   font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
   margin-block-start: 6px;
 }
 .region {
   min-width: 9rem;
   max-width: 100%;
 }
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px 24px;
+  margin-block-end: 16px;
+}
+.preset-row .region {
+  flex: 0 1 18rem;
+}
 .preset-settings {
-  margin: 0 22px 16px;
+  margin: 0;
   color: var(--muted);
   font-size: var(--text-caption);
   overflow-wrap: anywhere;
@@ -481,7 +579,7 @@ fieldset {
   margin-block: 12px;
 }
 .preset-feedback {
-  padding: 0 22px 16px;
+  padding: 0 0 12px;
   overflow-wrap: anywhere;
   font-size: var(--text-caption);
 }
@@ -493,7 +591,7 @@ fieldset {
   flex-wrap: wrap;
   gap: 16px;
   align-items: center;
-  padding-inline: 22px;
+  padding: 16px 22px 0;
 }
 .search-label {
   flex: 1 1 10rem;
@@ -522,6 +620,11 @@ fieldset {
   font-size: 0.75rem;
   color: var(--muted);
 }
+.filter-note a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
 .view-switch {
   display: flex;
   gap: 4px;
@@ -549,7 +652,8 @@ fieldset {
   min-width: 0;
   padding: 2px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  /* Concentric with the 6px button: 2px padding + 1px border. */
+  border-radius: 9px;
   background: var(--inset);
 }
 .channel-tile.selected {
@@ -680,7 +784,7 @@ tr.selected {
   line-height: 1.8;
 }
 .frequency-heading {
-  padding: 0 22px 22px;
+  padding: 16px 22px 8px;
 }
 .frequency-heading > p:first-child {
   font-family: ui-monospace, monospace;
@@ -742,7 +846,7 @@ figcaption {
   margin-block-start: 10px;
 }
 .recording {
-  margin-block: 20px;
+  margin-block: 24px 0;
 }
 .recording-bar,
 .recording-heading,
@@ -799,7 +903,7 @@ figcaption {
   padding: 0;
 }
 .monitor-selection {
-  padding: 16px 22px;
+  padding: 0 22px 16px;
 }
 #selection-hint {
   color: var(--muted);
@@ -809,6 +913,7 @@ figcaption {
 .recording-info {
   padding: 12px 22px 20px;
   font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -1055,7 +1160,7 @@ body:has(#about-dialog[open]) {
 @media (prefers-reduced-motion: no-preference) {
   button {
     transition:
-      transform 100ms cubic-bezier(0.2, 0, 0, 1),
+      transform 150ms ease-out,
       background-color 100ms cubic-bezier(0.2, 0, 0, 1);
   }
   button:enabled:active {
@@ -1069,15 +1174,6 @@ body:has(#about-dialog[open]) {
   }
 }
 @media (max-width: 78rem) {
-  .overview {
-    align-items: start;
-    flex-direction: column;
-    gap: 20px;
-  }
-  .totals {
-    max-width: none;
-    width: 100%;
-  }
   .source-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1105,6 +1201,14 @@ body:has(#about-dialog[open]) {
     flex-direction: column;
     padding: 20px;
   }
+  .session-bar-inner {
+    padding-inline: 20px;
+    gap: 8px 20px;
+  }
+  /* The full label stays in the monitor panel; keep the bar to two rows. */
+  .session-channel-label {
+    display: none;
+  }
   main {
     padding-inline: 20px;
   }
@@ -1131,8 +1235,14 @@ body:has(#about-dialog[open]) {
     padding: 16px;
     gap: 16px;
   }
+  .session-bar-inner {
+    padding-inline: 16px;
+  }
   main {
     padding-inline: 16px;
+  }
+  .tcp-fields {
+    grid-template-columns: minmax(0, 1fr);
   }
   h1 {
     font-size: 1.125rem;
@@ -1140,22 +1250,6 @@ body:has(#about-dialog[open]) {
   .brand-icon {
     width: 36px;
     flex-basis: 36px;
-  }
-  .overview {
-    padding-block: 24px;
-  }
-  .band-range {
-    font-size: 0.9375rem;
-  }
-  .band-range small {
-    display: block;
-  }
-  .totals {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
-  }
-  .totals dd {
-    font-size: 1.5rem;
   }
   .source-grid,
   .advanced-grid {
@@ -1196,7 +1290,6 @@ body:has(#about-dialog[open]) {
   .recording-hint,
   .recording-controls,
   .recording-info,
-  .preset-feedback,
   .output-options,
   .monitor-selection,
   .message-channel-bar,
@@ -1205,9 +1298,6 @@ body:has(#about-dialog[open]) {
   }
   .filter-note {
     padding-inline: 16px;
-  }
-  .preset-settings {
-    margin-inline: 16px;
   }
   table,
   tbody {
@@ -1266,7 +1356,7 @@ body:has(#about-dialog[open]) {
     text-align: start;
   }
   .frequency-heading {
-    padding: 0 16px 20px;
+    padding: 16px 16px 8px;
   }
   .frequency-heading > p:first-child {
     font-size: 1.625rem;

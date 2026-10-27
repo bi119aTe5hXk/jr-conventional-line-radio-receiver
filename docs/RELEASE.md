@@ -2,7 +2,7 @@
 
 English | [日本語](RELEASE.ja.md)
 
-JR Cconventional-line Radio Receiver
+JR Conventional-line Radio Receiver
 
 ## Distribution archives
 
@@ -19,7 +19,7 @@ Extract the archive and run `jr-receiver-desktop` for the GUI or `jr-receiver` f
 Each archive includes `radio-presets.json`, its JSON Schema, runtime instructions, voice-coefficient provenance metadata, and build information.
 The archive's `README.md` is the English release guide and `README.ja.md` is its Japanese version. Links at the top switch between them.
 The bundled preset JSON is a template for editing external presets; it is not loaded automatically at startup.
-Select it explicitly through “チャンネル一覧” (Channels) → “プリセットファイル” (Preset file) in the app.
+Select it explicitly through “受信設定” (Receive settings) → “プリセットファイル” (Preset file) in the app.
 
 The workflow does not generate installers, AppImage, DMG, or `.app` bundles. It does not perform Windows signing, Apple Developer ID signing, or notarization.
 macOS executables receive an ad-hoc signature after library paths are adjusted; this does not establish the publisher's identity.
@@ -93,9 +93,9 @@ At runtime, add its DLL directory to `PATH` or place the DLL beside the executab
 ## Building and publishing binaries
 
 **Trial build:** select Actions → Release → Run workflow. Artifacts for all four targets are retained for 14 days.
-Manual runs never publish a GitHub Release, even when run on a tag. Branch builds use names such as `v1.6.0-dev-<short-commit-id>`.
+Manual runs never publish a GitHub Release, even when run on a tag. Branch builds use names such as `v1.7.0-dev-<short-commit-id>`.
 
-**Publish:** set the three types of product manifest listed above to the same version, then push a matching tag such as `v1.6.0`.
+**Publish:** set the three types of product manifest listed above to the same version, then push a matching tag such as `v1.7.0`.
 A mismatch between the tag and manifest versions fails the workflow.
 After the shared CI checks pass, Release builds all four targets and also runs the Rust test suite on macOS and Windows.
 Each archive's CLI is checked for successful loading of the built-in presets. A GitHub Release is created only if all four targets succeed.
